@@ -21,6 +21,7 @@
 | 06 | [AI Security & Privacy Model](06-ai-security-privacy.md) | Threat model, controls (enforcement vs detection), the agent capability model, and the data lifecycle. |
 | 07 | [Roadmap & Architecture Decisions](07-roadmap-and-decisions.md) | Staged releases (R1/R2/R3), phased plan, open decisions, ADRs, risks, team and capacity. |
 | 08 | [Validation Plan](08-validation-plan.md) | Gates, foundation (fork) evaluation, technical spikes, user research, and the Chromium update & security process. |
+| 09 | [Implementation Plan](09-implementation/README.md) | For developers: the engineering handbook and phase-by-phase tasks (Phase 0 → Stage B agent), with Chromium integration points, interfaces, estimates, and done criteria. |
 
 ## Release plan at a glance
 
@@ -33,7 +34,7 @@
 ## How to read this set
 
 - **Product / stakeholders:** 02 → 03 → 07 §1–3 → 04 §1–2 → 08 §1.
-- **Engineers:** 01 → 05 → 06 → 04 (§3–7) → 07 (ADRs) → 08 §2–3.
+- **Engineers:** 01 → 05 → 06 → 04 (§3–7) → 07 (ADRs) → 08 §2–3 → 09 (handbook, then your phase).
 - **Security reviewers:** 06 → 05 §3, §4, §7 → 04 §5.3 → 08 §5.
 - **QA / release:** 04 §7 (verification and measurement methods) → 08 §5.
 

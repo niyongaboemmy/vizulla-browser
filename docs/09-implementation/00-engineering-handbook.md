@@ -196,7 +196,7 @@ The macro still needs a one-line insertion point upstream, so it is a patch too.
 | Compile-time | GN `vizulla_enable_<x>` | Only for code that must not ship at all on some platforms (e.g. no agent code in a Stable build before G5) |
 | Runtime default | `BASE_FEATURE(kVizullaSpaces, "VizullaSpaces", base::FEATURE_DISABLED_BY_DEFAULT)` | Every feature. Flipped to enabled-by-default at its release gate. |
 | User toggle | An entry in `vizulla://flags` (upstream flags page, via override) | Nightly/Beta testing |
-| Remote config | **Our own variations seed server** (upstream variations framework, pointed at a Vizulla URL) | Staged rollouts, kill switches, the agent-tester audience ([roadmap §2.1](../../07-roadmap-and-decisions.md#21-feature-flags-and-audiences-resolves-the-v01-agent-behind-a-flag-ambiguity)) |
+| Remote config | **Our own variations seed server** (upstream variations framework, pointed at a Vizulla URL) | Staged rollouts, kill switches, the agent-tester audience ([roadmap §2.1](../07-roadmap-and-decisions.md#21-feature-flags-and-audiences-resolves-the-v01-agent-behind-a-flag-ambiguity)) |
 
 Naming: `kVizulla<Feature>`. Every flag has an owner and a removal date in `vizulla/browser/vizulla_features.cc`. Flags are removed within two releases after reaching 100%.
 

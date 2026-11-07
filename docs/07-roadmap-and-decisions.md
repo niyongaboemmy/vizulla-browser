@@ -155,6 +155,16 @@ Each decision has a proposal, an owner, and the gate it must be settled by. Prop
 - **Decision:** Security decisions (origin scope, allowed tools, allowed data fields, confirmations, credential fill) are made by deterministic browser-process code. Injection detection, trust labels, and spotlighting reduce risk and alert the user, but no security property depends on them (doc 06 §1.1).
 - **Consequences:** + Security claims are auditable and testable. − Some useful agent behaviors are blocked by conservative rules and need explicit user approval.
 
+### ADR-012: Vertical tab list in native Views (amends ADR-006)
+- **Status:** Proposed, decided by spike S5 (DD-2 in the [implementation plan](09-implementation/README.md#4-design-decisions-introduced-by-this-plan)).
+- **Decision:** The vertical tab list is native Views reusing upstream tab rendering and `TabStripModel`. WebUI is kept for the Space switcher menus, archive, and panels.
+- **Rationale:** The tab list is a hot path: drag-and-drop, hundreds of rows, startup cost, and accessibility. A WebUI tab list adds a renderer to the critical path.
+
+### ADR-013: Shields request filter in the browser process via a URLLoaderFactory proxy (amends ADR-007)
+- **Status:** Proposed, decided by the Phase 1 benchmark (DD-3).
+- **Decision:** Install the request filter with the same proxy hook the extensions webRequest API uses, and call the Rust engine on a thread pool. Move it into the network service only if profiling shows IPC cost (> 1 ms p95 per request).
+- **Rationale:** No patches inside the network service, which keeps rebases cheap. The same proxy mechanism also serves the agent egress filter (R3).
+
 ---
 
 ## 5. Risks
