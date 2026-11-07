@@ -78,8 +78,11 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          if [ -z "$CSC_LINK" ]; then export CSC_IDENTITY_AUTO_DISCOVERY=false; echo "::notice::No signing certificate: building unsigned installers"; fi
-          if [ -n "$APPLE_ID" ]; then EXTRA="-c.mac.notarize=true"; fi
+          # Missing secrets arrive as empty strings; electron-builder would read CSC_LINK="" as a path.
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do [ -z "${!v}" ] && unset "$v"; done
+          if [ -z "${CSC_LINK:-}" ]; then export CSC_IDENTITY_AUTO_DISCOVERY=false; echo "::notice::No signing certificate: building unsigned installers"; fi
+          EXTRA=""
+          if [ -n "${APPLE_ID:-}" ]; then EXTRA="-c.mac.notarize=true"; fi
           npx electron-builder ${{ matrix.target }} --publish never $EXTRA
         env:
           CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || secrets.CSC_LINK }}
