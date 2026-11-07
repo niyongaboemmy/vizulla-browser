@@ -1,0 +1,221 @@
+# Release (handbook §11.1, Release tier): runs on a version tag (v0.1.0, …).
+#   1. The full CI suite must pass.
+#   2. Installers are built on macOS (arm64 + x64), Windows (x64), and Linux (x64),
+#      and each PACKAGED app must pass `--vz-self-test`.
+#   3. Cloud services (AI Gateway, sync server) are cross-compiled.
+#   4. SBOM + SHA-256 checksums are generated and everything is published as a
+#      GitHub Release.
+#
+# Signing is optional and turns on when the secrets exist:
+#   macOS:   CSC_LINK, CSC_KEY_PASSWORD (Developer ID .p12), APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+#   Windows: WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD
+#   Shields: VZ_SHIELDS_SIGNING_KEY (ed25519 PKCS#8 PEM) to publish signed filter lists
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  GO_VERSION: '1.24'
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    name: Package (${{ matrix.name }})
+    needs: ci
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-14
+            target: --mac
+            selftest: out/dist/mac-arm64/Vizulla.app/Contents/MacOS/Vizulla
+          - name: Windows
+            os: windows-latest
+            target: --win
+            selftest: out/dist/win-unpacked/Vizulla.exe
+          - name: Linux
+            os: ubuntu-latest
+            target: --linux
+            selftest: out/dist/linux-unpacked/vizulla
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      HAS_LIST_KEY: ${{ secrets.VZ_SHIELDS_SIGNING_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+      - name: Check that the tag matches package.json
+        shell: bash
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          [ "v$v" = "$TAG" ] || { echo "Tag $TAG does not match package.json version $v"; exit 1; }
+      - name: Build (release)
+        run: node tools/vz.mjs build --release
+      - name: Package
+        shell: bash
+        run: |
+          if [ -z "$CSC_LINK" ]; then export CSC_IDENTITY_AUTO_DISCOVERY=false; echo "::notice::No signing certificate: building unsigned installers"; fi
+          if [ -n "$APPLE_ID" ]; then EXTRA="-c.mac.notarize=true"; fi
+          npx electron-builder ${{ matrix.target }} --publish never $EXTRA
+        env:
+          CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Self-test the packaged app (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libnss3 libasound2t64 libgbm1 > /dev/null
+          VZ_SELF_TEST_OUT="$RUNNER_TEMP/selftest.txt" xvfb-run -a ${{ matrix.selftest }} --vz-self-test --no-sandbox --user-data-dir="$RUNNER_TEMP/profile" || true
+          cat "$RUNNER_TEMP/selftest.txt"
+          grep -q '"ok":true' "$RUNNER_TEMP/selftest.txt"
+      - name: Self-test the packaged app (macOS / Windows)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          VZ_SELF_TEST_OUT="$RUNNER_TEMP/selftest.txt" "${{ matrix.selftest }}" --vz-self-test --user-data-dir="$RUNNER_TEMP/profile" || true
+          cat "$RUNNER_TEMP/selftest.txt"
+          grep -q '"ok":true' "$RUNNER_TEMP/selftest.txt"
+      - name: SBOM
+        if: runner.os == 'Linux'
+        run: node tools/sbom.mjs && cp out/release/sbom.cdx.json out/dist/vizulla-${TAG#v}-sbom.cdx.json
+      - name: Signed filter lists
+        if: runner.os == 'Linux' && env.HAS_LIST_KEY == 'true'
+        run: node tools/lists.mjs && mkdir -p out/dist/shields && cp out/lists/* out/dist/shields/
+        env:
+          VZ_SHIELDS_SIGNING_KEY: ${{ secrets.VZ_SHIELDS_SIGNING_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.name }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            out/dist/*.dmg
+            out/dist/*.zip
+            out/dist/*.exe
+            out/dist/*.AppImage
+            out/dist/*.deb
+            out/dist/*-sbom.cdx.json
+            out/dist/shields/*
+
+  cloud:
+    name: Cloud binaries
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: cloud/go.mod
+      - name: Cross-compile
+        working-directory: cloud
+        run: |
+          set -euo pipefail
+          mkdir -p ../out/cloud
+          for target in linux/amd64 linux/arm64 darwin/arm64 darwin/amd64 windows/amd64; do
+            os="${target%/*}"; arch="${target#*/}"; ext=""; [ "$os" = windows ] && ext=".exe"
+            dir="vizulla-cloud-${TAG#v}-${os}-${arch}"
+            mkdir -p "/tmp/$dir"
+            for cmd in gateway syncserver; do
+              CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "/tmp/$dir/vizulla-$cmd$ext" ./cmd/$cmd
+            done
+            tar -C /tmp -czf "../out/cloud/$dir.tar.gz" "$dir"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-cloud
+          path: out/cloud/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    needs: [package, cloud]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: release
+          merge-multiple: true
+      - name: Checksums
+        working-directory: release
+        run: |
+          find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #' > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Release notes
+        run: |
+          v="${TAG#v}"
+          chromium="$(grep -oh 'pkg:generic/chromium@[0-9.]*' release/*-sbom.cdx.json | head -1 | cut -d@ -f2)"
+          cat > notes.md <<NOTES
+          # Vizulla $v
+
+          A calm, private, AI-native browser on Chromium $chromium (Blink + V8).
+
+          **This is an early preview.** Installers are unsigned unless noted, so macOS Gatekeeper and Windows SmartScreen will warn on first launch. See the [implementation status](https://github.com/${GITHUB_REPOSITORY}/blob/$TAG/docs/09-implementation/IMPLEMENTATION_STATUS.md) for what is and isn't done.
+
+          ## Highlights
+          - Vertical tabs, Spaces, auto-archive, Focus, split view, and a Command Bar (Ctrl/⌘+K)
+          - Shields: ad and tracker blocking, HTTPS-First, third-party cookie blocking, fingerprinting protection, cookie-banner reject
+          - Assistant: page and PDF Q&A with citations, on device by default; Vizulla Cloud or your own key (Anthropic, OpenAI, Google, OpenAI-compatible)
+          - Opt-in, encrypted Memory; Notes; natural-language commands; end-to-end encrypted sync
+          - Supervised task agent (experimental, off by default): isolated session, deterministic policy checks, confirmations
+          - English and French; Kinyarwanda and Swahili drafts
+
+          ## Downloads
+          | Platform | File |
+          |---|---|
+          | macOS (Apple Silicon) | \`Vizulla-$v-mac-arm64.dmg\` |
+          | macOS (Intel) | \`Vizulla-$v-mac-x64.dmg\` |
+          | Windows (x64) | \`Vizulla-$v-win-x64.exe\` |
+          | Linux (x64) | \`Vizulla-$v-linux-x86_64.AppImage\`, \`.deb\` |
+          | Cloud services | \`vizulla-cloud-$v-<os>-<arch>.tar.gz\` (AI Gateway, sync server) |
+
+          Verify downloads with \`SHA256SUMS.txt\`. The SBOM (CycloneDX) is attached.
+          NOTES
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$TAG" in v0.*|*-*) prerelease="--prerelease";; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            find release -type f -print0 | xargs -0 gh release upload "$TAG" --clobber
+          else
+            find release -type f -print0 | xargs -0 gh release create "$TAG" --title "Vizulla ${TAG#v}" --notes-file notes.md --verify-tag $prerelease
+          fi

@@ -1,0 +1,86 @@
+# CI (handbook §11.1, PR tier): lint + typecheck, unit tests, cloud tests, and the
+# Electron E2E suite. Also called by release.yml as the gate before packaging.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  GO_VERSION: '1.24'
+
+jobs:
+  checks:
+    name: Lint and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Lint (typecheck, string coverage, feature flags)
+        run: node tools/vz.mjs lint
+      - name: Unit tests
+        run: node tools/vz.mjs test unit
+
+  cloud:
+    name: Cloud services (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: cloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: cloud/go.mod
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  e2e:
+    name: End-to-end (Electron, macOS)
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: cloud/go.mod
+      - run: npm ci
+      # npm ≥ 11 may skip install scripts; fetch the Electron binary explicitly.
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+      - name: Build
+        run: node tools/vz.mjs build
+      - name: E2E tests
+        run: npx playwright test
+        env:
+          CI: 'true'
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 7
