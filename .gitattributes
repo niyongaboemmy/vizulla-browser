@@ -1,0 +1,18 @@
+# Normalize line endings; keep LF in the repo
+* text=auto eol=lf
+
+*.md   text diff=markdown
+*.json text
+*.yml  text
+*.yaml text
+*.sh   text eol=lf
+
+# Binary assets
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.pdf  binary
+*.ico  binary
+*.zip  binary

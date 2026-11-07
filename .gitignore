@@ -1,0 +1,39 @@
+# OS
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Editors / IDEs
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Local tool state
+.tmcode/
+.claude/settings.local.json
+
+# Secrets and local env (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Build / dependency output (future tooling)
+node_modules/
+dist/
+out/
+build/
+*.log
+
+# Large Chromium workspace, if ever checked out here (handbook §1: never committed)
+src/
+.gclient
+.gclient_entries
