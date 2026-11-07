@@ -53,6 +53,8 @@ test('keyboard: Command Bar opens, navigates, and closes without a mouse', async
   await h.chrome();
   await inMain(h, (vz) => vz.runCommand(vz.focused(), 'nav.commandBar'));
   const ov = await page(h, 'vizulla://overlay');
+  // Like a person, type once the field has focus (slow CI runners take longer to focus it).
+  await expect(ov.locator('vz-overlay input')).toBeFocused();
   await ov.keyboard.type('> settings');
   await expect(ov.locator('vz-overlay .row.sel')).toContainText('Settings');
   await ov.keyboard.press('Enter');
@@ -154,7 +156,10 @@ test('signed filter lists: a signed update is accepted and swapped in; a tampere
   const { createServer } = await import('node:http');
   const { readFileSync: read } = await import('node:fs');
   const { ROOT } = await import('./harness');
-  execFileSync(process.execPath, ['tools/vz.mjs', 'build'], { cwd: ROOT }); // ships the dev public key (build wipes out/)
+  // 1) ensure the dev signing key exists, 2) build so the app ships its public key,
+  // 3) sign again (the build wipes out/, including out/lists).
+  execFileSync(process.execPath, ['tools/lists.mjs'], { cwd: ROOT });
+  execFileSync(process.execPath, ['tools/vz.mjs', 'build'], { cwd: ROOT });
   execFileSync(process.execPath, ['tools/lists.mjs'], { cwd: ROOT });
   let tamper = false;
   const cdn = createServer((req, res) => {
