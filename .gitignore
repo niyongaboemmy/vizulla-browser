@@ -37,3 +37,8 @@ build/
 src/
 .gclient
 .gclient_entries
+
+# Local toolchain caches
+.cache/
+test-results/
+playwright-report/

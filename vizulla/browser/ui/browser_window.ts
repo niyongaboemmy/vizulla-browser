@@ -1,0 +1,722 @@
+// BrowserWindowController: one window. Owns the chrome WebUI view (vizulla://chrome),
+// the tab views, the overlay layer, and the window's TabStripModel.
+//
+// View stack (bottom → top): chrome UI (sidebar, toolbar, panels) · tab view(s)
+// placed in the content rect the chrome UI reports · overlay (when open).
+import { BaseWindow, clipboard, Menu, nativeTheme, screen, WebContentsView, type WebContents } from 'electron';
+import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import type { BrowserApp } from '../browser_app';
+import type { Profile } from '../profile';
+import { TabStripModel } from '../tabs/tab_strip_model';
+import { logicalUrl, WebTab } from '../tabs/web_tab';
+import type { NavState, SessionWindow } from '../spaces/spaces_service';
+import { OverlayController } from './overlay';
+import { emitTo } from './ipc_router';
+import { buildPageContextMenu } from './context_menu';
+import { classifyInput, displayUrl, searchUrl, siteOf } from '@vz/common/url';
+import { windowBackground } from '@vz/common/tokens';
+import { t } from '@vz/common/i18n';
+import type { PanelKind, Rect, SpaceColor, SpaceIcon, TabInfo, ToastInfo, WindowState } from '@vz/common/types';
+import { kVizullaAutoArchive } from '../vizulla_features';
+
+const isMac = process.platform === 'darwin';
+
+export interface CreateTabOptions {
+  url?: string;
+  nav?: NavState | null;
+  title?: string;
+  favicon?: string | null;
+  spaceId?: string;
+  activate?: boolean;
+  afterId?: number;
+  openerId?: number | null;
+  pinned?: boolean;
+  groupId?: string | null;
+  discarded?: boolean;
+  lastActive?: number;
+  adoptView?: WebContentsView;
+  agent?: boolean;
+  session?: Electron.Session;
+}
+
+interface ClosedTab {
+  spaceId: string;
+  url: string;
+  title: string;
+  nav: NavState;
+  pinned: boolean;
+}
+
+export class BrowserWindowController extends EventEmitter {
+  readonly key: string;
+  readonly win: BaseWindow;
+  readonly chrome: WebContentsView;
+  readonly overlay: OverlayController;
+  readonly model: TabStripModel;
+  readonly tabs = new Map<number, WebTab>();
+  private contentRect: Rect = { x: 0, y: 0, width: 0, height: 0 };
+  private splitRect: Rect | null = null;
+  private splitTabId: number | null = null;
+  private panel: PanelKind | null = null;
+  private toasts: (ToastInfo & { timer: NodeJS.Timeout; run?: () => void })[] = [];
+  private readonly closed: ClosedTab[] = [];
+  private stateTimer: NodeJS.Timeout | null = null;
+  private saveTimer: NodeJS.Timeout | null = null;
+  private attachedViews = new Set<WebContentsView>();
+  private htmlFullscreen = false;
+  private destroyed = false;
+  private chromeReady = false;
+
+  constructor(readonly app: BrowserApp, readonly profile: Profile, restore: SessionWindow | null) {
+    super();
+    this.key = restore?.key ?? randomUUID();
+    const prefs = profile.prefs;
+    const bounds = restore?.bounds ?? defaultBounds();
+    this.win = new BaseWindow({
+      ...bounds,
+      minWidth: 640,
+      minHeight: 420,
+      show: false,
+      title: profile.isPrivate ? 'Vizulla — Private' : 'Vizulla',
+      backgroundColor: windowBackground(this.resolvedTheme()),
+      ...(isMac
+        ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'sidebar', visualEffectState: 'followWindow' }
+        : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#eef1f6' : '#0f172a', height: 40 } }),
+    } as Electron.BaseWindowConstructorOptions);
+    this.chrome = new WebContentsView({
+      webPreferences: {
+        session: app.chromeSession,
+        preload: app.preloadPath,
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        spellcheck: false,
+        backgroundThrottling: false,
+      },
+    });
+    this.chrome.setBackgroundColor('#00000000');
+    this.win.contentView.addChildView(this.chrome);
+    this.overlay = new OverlayController(this.win, app.preloadPath, () => app.chromeSession);
+    this.overlay.onClosed = (surface) => {
+      if (surface?.kind === 'command-bar') this.focusActive();
+    };
+
+    const spaces = profile.spaces.list();
+    const activeSpace = restore?.activeSpaceId && spaces.some((s) => s.id === restore.activeSpaceId) ? restore.activeSpaceId : spaces[0]!.id;
+    this.model = new TabStripModel(activeSpace);
+    this.model.on('changed', () => {
+      this.syncViews();
+      this.pushState();
+      this.scheduleSave();
+    });
+    this.panel = null;
+
+    this.win.on('resize', () => {
+      this.overlay.layout();
+      this.scheduleSave();
+    });
+    this.win.on('move', () => this.scheduleSave());
+    this.win.on('focus', () => this.app.setLastFocused(this));
+    this.win.on('enter-full-screen', () => this.pushState());
+    this.win.on('leave-full-screen', () => this.pushState());
+    this.win.on('close', () => this.onClose());
+    this.chrome.webContents.on('did-finish-load', () => {
+      this.chromeReady = true;
+      this.pushState(true);
+    });
+    this.chrome.webContents.on('render-process-gone', () => {
+      // The chrome UI must never stay dead: reload it.
+      this.chromeReady = false;
+      setTimeout(() => !this.destroyed && void this.chrome.webContents.loadURL('vizulla://chrome/'), 200);
+    });
+    this.layoutChrome();
+    this.win.on('resize', () => this.layoutChrome());
+    void this.chrome.webContents.loadURL('vizulla://chrome/');
+
+    if (restore?.tabs.length) {
+      for (const g of restore.groups) this.model.restoreGroup(g);
+      for (const tab of restore.tabs) {
+        const created = this.createTab({
+          nav: tab.nav, url: tab.url, title: tab.title, favicon: tab.favicon, spaceId: tab.spaceId, pinned: tab.pinned,
+          groupId: tab.groupId, lastActive: tab.lastActive, discarded: true, activate: false,
+        });
+        if (tab.active) this.model.setActiveForSpace(tab.spaceId, created.id);
+      }
+      this.model.switchSpace(activeSpace);
+      this.activeTab()?.ensureLive();
+    }
+    if (!this.model.visible().length) this.createTab({ url: 'vizulla://newtab/', activate: true });
+
+    this.win.show();
+    if (isMac) this.win.setWindowButtonVisibility(true);
+  }
+
+  // ---------------------------------------------------------------- tabs
+
+  activeTab(): WebTab | null {
+    const id = this.model.activeTabId;
+    return id === null ? null : (this.tabs.get(id) ?? null);
+  }
+
+  createTab(o: CreateTabOptions): WebTab {
+    const spaceId = o.spaceId ?? this.model.activeSpaceId;
+    const tab = new WebTab({
+      session: o.session ?? this.profile.session,
+      url: o.url,
+      nav: o.nav,
+      title: o.title,
+      favicon: o.favicon,
+      discarded: o.discarded,
+      preload: this.app.preloadPath,
+      agent: o.agent,
+      adoptView: o.adoptView,
+      onOpen: ({ url, disposition, options }) => {
+        const view = new WebContentsView({ webContents: (options as { webContents?: WebContents }).webContents, webPreferences: options.webPreferences } as Electron.WebContentsViewConstructorOptions);
+        const child = this.createTab({
+          adoptView: view, url, spaceId: this.model.get(tab.id)?.spaceId, afterId: tab.id, openerId: tab.id,
+          activate: disposition !== 'background-tab', agent: tab.agent, session: tab.session,
+        });
+        return child.wc;
+      },
+    });
+    this.tabs.set(tab.id, tab);
+    this.wireTab(tab);
+    this.model.add(
+      { id: tab.id, spaceId, openerId: o.openerId ?? null, pinned: o.pinned ?? false, groupId: o.groupId ?? null, lastActive: o.lastActive },
+      { afterId: o.afterId, activate: o.activate ?? true },
+    );
+    return tab;
+  }
+
+  private wireTab(tab: WebTab): void {
+    const profile = this.profile;
+    tab.on('updated', () => this.pushState());
+    tab.on('main-frame-navigation-start', () => {
+      if (tab.wc) profile.shields.resetCounts(tab.wc.id);
+    });
+    tab.on('navigated', (url: string) => {
+      if (!profile.isPrivate && !tab.agent) profile.history.addVisit(url, tab.title, { typed: this.pendingTyped.delete(tab.id) });
+      this.emit('tab-navigated', tab);
+      this.scheduleSave();
+    });
+    tab.on('title', (title: string) => {
+      if (!profile.isPrivate && !tab.agent) profile.history.updateTitle(tab.url, title);
+      this.scheduleSave();
+    });
+    tab.on('favicon', (fav: string) => !profile.isPrivate && profile.history.updateFavicon(tab.url, fav));
+    tab.on('dom-ready', () => {
+      if (tab.wc) void profile.shields.applyCosmetic(tab.wc);
+      this.emit('tab-dom-ready', tab);
+    });
+    tab.on('did-finish-load', () => this.emit('tab-loaded', tab));
+    tab.on('load-failed', ({ code, desc, url }: { code: number; desc: string; url: string }) => {
+      const wc = tab.wc;
+      if (!wc) return;
+      if (profile.shields.handleUpgradeFailure(wc, url)) return;
+      if (url.startsWith('vizulla://error')) return;
+      const q = new URLSearchParams({ code: String(code), desc, url });
+      void wc.loadURL(`vizulla://error/?${q.toString()}`).catch(() => undefined);
+    });
+    tab.on('context-menu', (params: Electron.ContextMenuParams) => {
+      const menu = buildPageContextMenu(this, tab, params);
+      menu.popup({ window: this.win as unknown as Electron.BrowserWindow });
+    });
+    tab.on('input', (e: Electron.Event, input: Electron.Input) => this.app.handleTabInput(this, tab, e, input));
+    tab.on('html-fullscreen', (on: boolean) => {
+      this.htmlFullscreen = on;
+      this.win.setFullScreen(on);
+      this.layoutTabs();
+      this.pushState();
+    });
+    tab.on('closed-by-page', () => this.closeTab(tab.id, { fromPage: true }));
+    tab.on('found', (r: Electron.Result) => emitTo(this.chrome.webContents, 'Shell', 'found', { tabId: tab.id, active: r.activeMatchOrdinal, total: r.matches }));
+    tab.on('zoom-key', (dir: 'in' | 'out') => this.zoom(tab.id, dir));
+  }
+
+  private readonly pendingTyped = new Set<number>();
+
+  closeTab(id: number, opts: { fromPage?: boolean; noUndo?: boolean } = {}): void {
+    const tab = this.tabs.get(id);
+    const meta = this.model.get(id);
+    if (!tab || !meta) return;
+    if (!opts.noUndo && !tab.agent && !this.profile.isPrivate) {
+      this.closed.push({ spaceId: meta.spaceId, url: logicalUrl(tab.url), title: tab.title, nav: tab.navState(), pinned: meta.pinned });
+      if (this.closed.length > 25) this.closed.shift();
+    }
+    if (this.splitTabId === id) this.splitTabId = null;
+    this.detachView(tab.view);
+    this.tabs.delete(id);
+    this.emit('tab-closed', tab);
+    if (!opts.fromPage) tab.destroy();
+    this.model.remove(id);
+    // A window always shows something: an empty Space gets the start page.
+    if (!this.model.visible().length && !this.destroyed) this.createTab({ url: 'vizulla://newtab/', activate: true });
+  }
+
+  reopenClosed(): void {
+    const c = this.closed.pop();
+    if (!c) return;
+    const spaceId = this.profile.spaces.get(c.spaceId) ? c.spaceId : this.model.activeSpaceId;
+    if (spaceId !== this.model.activeSpaceId) this.model.switchSpace(spaceId);
+    this.createTab({ nav: c.nav, url: c.url, title: c.title, spaceId, pinned: c.pinned, activate: true });
+  }
+
+  activateTab(id: number): void {
+    this.model.activate(id);
+    this.focusActive();
+  }
+
+  navigate(tabId: number, input: string, opts: { newTab?: boolean } = {}): void {
+    const r = classifyInput(input);
+    let url: string;
+    if (r.route === 'navigate') url = r.url;
+    else if (r.route === 'search') url = searchUrl(this.profile.prefs.get('search.engine'), r.text);
+    else if (r.route === 'ask') {
+      this.app.ask(this, r.text);
+      return;
+    } else return;
+    this.loadUrl(tabId, url, { typed: r.route === 'navigate', newTab: opts.newTab });
+  }
+
+  loadUrl(tabId: number | null, url: string, opts: { typed?: boolean; newTab?: boolean } = {}): void {
+    if (/^(javascript|vbscript):/i.test(url)) return;
+    let tab = tabId !== null ? this.tabs.get(tabId) : undefined;
+    if (!tab || opts.newTab || this.model.get(tab.id)?.pinned && siteOf(url) !== siteOf(tab.url) && !tab.url.startsWith('vizulla://newtab')) {
+      tab = this.createTab({ url, activate: true, afterId: tab?.id });
+    } else {
+      const wc = tab.ensureLive();
+      void wc.loadURL(url).catch(() => undefined);
+      this.model.activate(tab.id);
+    }
+    if (opts.typed) this.pendingTyped.add(tab.id);
+    tab.url = url;
+    this.focusActive();
+    this.pushState();
+  }
+
+  zoom(tabId: number, dir: 'in' | 'out' | 'reset'): void {
+    const tab = this.tabs.get(tabId);
+    const wc = tab?.wc;
+    if (!tab || !wc) return;
+    const steps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
+    const cur = wc.getZoomFactor();
+    const nearest = steps.reduce((best, s, k) => (Math.abs(s - cur) < Math.abs(steps[best]! - cur) ? k : best), 0);
+    const next = dir === 'reset' ? 1 : steps[Math.max(0, Math.min(steps.length - 1, nearest + (dir === 'in' ? 1 : -1)))]!;
+    wc.setZoomFactor(next);
+    tab.zoom = next;
+    this.toast(t('toast_zoom', { pct: Math.round(next * 100) }), undefined, 1500);
+    this.pushState();
+  }
+
+  discardTab(id: number): boolean {
+    const tab = this.tabs.get(id);
+    if (!tab || tab.discarded || id === this.model.activeTabId || id === this.splitTabId || tab.audible || tab.agent) return false;
+    this.detachView(tab.view);
+    tab.discard();
+    return true;
+  }
+
+  // ---------------------------------------------------------------- spaces
+
+  switchSpace(spaceId: string): void {
+    if (!this.profile.spaces.get(spaceId)) return;
+    this.splitTabId = null;
+    this.model.switchSpace(spaceId);
+    if (!this.model.visible().length) this.createTab({ url: 'vizulla://newtab/', spaceId, activate: true });
+    this.activeTab()?.ensureLive();
+    this.focusActive();
+  }
+
+  cycleSpace(offset: number): void {
+    const spaces = this.profile.spaces.list();
+    const i = spaces.findIndex((s) => s.id === this.model.activeSpaceId);
+    const next = spaces[(((i + offset) % spaces.length) + spaces.length) % spaces.length];
+    if (next) this.switchSpace(next.id);
+  }
+
+  async editSpace(spaceId: string | null): Promise<void> {
+    const existing = spaceId ? this.profile.spaces.get(spaceId) : undefined;
+    const r = await this.overlay.dialog<{ name: string; color: SpaceColor; icon: SpaceIcon } | null>({
+      type: 'space-edit',
+      title: existing ? t('space_edit_title') : t('space_new_title'),
+      name: existing?.name ?? '',
+      color: existing?.color ?? null,
+      icon: existing?.icon ?? 'star',
+    });
+    if (!r) return;
+    if (existing) this.profile.spaces.update(existing.id, r);
+    else {
+      const s = this.profile.spaces.create(r);
+      this.switchSpace(s.id);
+    }
+    this.app.broadcastState();
+  }
+
+  async deleteSpace(spaceId: string): Promise<void> {
+    const space = this.profile.spaces.get(spaceId);
+    if (!space || this.profile.spaces.list().length <= 1) return;
+    const ok = await this.overlay.dialog<boolean | null>({
+      type: 'confirm',
+      title: t('space_delete_title', { name: space.name }),
+      body: t('space_delete_body'),
+      confirm: t('action_delete'),
+      danger: true,
+    });
+    if (!ok) return;
+    // Tabs of a deleted Space are archived into the next Space so nothing is lost.
+    const target = this.profile.spaces.list().find((s) => s.id !== spaceId)!;
+    for (const w of this.app.windowsOf(this.profile)) {
+      for (const m of w.model.visible(spaceId)) {
+        const tab = w.tabs.get(m.id);
+        if (tab && !tab.url.startsWith('vizulla://newtab')) this.profile.spaces.archive({ spaceId: target.id, url: tab.url, title: tab.title, favicon: tab.favicon, nav: tab.navState() });
+        w.closeTab(m.id, { noUndo: true });
+      }
+      if (w.model.activeSpaceId === spaceId) w.switchSpace(target.id);
+    }
+    this.profile.spaces.remove(spaceId);
+    this.app.broadcastState();
+  }
+
+  // ---------------------------------------------------------------- archive & focus
+
+  /** Archives unpinned tabs idle longer than the threshold (TAB-04). Returns how many. */
+  autoArchive(now = Date.now(), force = false): number {
+    if (!this.profile.features.isEnabled(kVizullaAutoArchive) || (!force && !this.profile.prefs.get('tabs.archiveEnabled'))) return 0;
+    const threshold = force ? 30 * 60_000 : this.profile.prefs.get('tabs.archiveAfterHours') * 3600_000;
+    const archived: { id: number; spaceId: string }[] = [];
+    for (const m of [...this.model.all()]) {
+      const tab = this.tabs.get(m.id);
+      if (!tab || m.pinned || tab.agent || tab.audible) continue;
+      if (this.model.activeForSpace(m.spaceId) === m.id) continue;
+      if (now - m.lastActive < threshold) continue;
+      if (tab.url.startsWith('vizulla://newtab')) {
+        this.closeTab(m.id, { noUndo: true });
+        continue;
+      }
+      const aid = this.profile.spaces.archive({ spaceId: m.spaceId, url: tab.url, title: tab.title, favicon: tab.favicon, nav: tab.navState() });
+      archived.push({ id: aid, spaceId: m.spaceId });
+      this.closeTab(m.id, { noUndo: true });
+    }
+    if (archived.length) {
+      this.toast(t('toast_archived', { count: archived.length }), {
+        label: t('action_undo'),
+        run: () => archived.forEach((a) => this.restoreArchived(a.id, false)),
+      });
+    }
+    return archived.length;
+  }
+
+  restoreArchived(id: number, activate = true): void {
+    const a = this.profile.spaces.takeArchived(id);
+    if (!a) return;
+    const spaceId = this.profile.spaces.get(a.spaceId) ? a.spaceId : this.model.activeSpaceId;
+    if (activate && spaceId !== this.model.activeSpaceId) this.model.switchSpace(spaceId);
+    this.createTab({ nav: a.nav, url: a.url, title: a.title, favicon: a.favicon, spaceId, activate, discarded: !activate });
+  }
+
+  /** Focus (TAB-08): discard every tab outside the active Space, except audible ones. */
+  focusMode(): number {
+    let n = 0;
+    for (const m of this.model.all()) if (m.spaceId !== this.model.activeSpaceId && this.discardTab(m.id)) n++;
+    this.toast(t('toast_focus', { count: n }));
+    return n;
+  }
+
+  // ---------------------------------------------------------------- layout
+
+  setContentBounds(main: Rect, split?: Rect): void {
+    this.contentRect = main;
+    this.splitRect = split ?? null;
+    this.layoutTabs();
+  }
+
+  setSplit(tabId: number | null): void {
+    if (tabId !== null && (!this.tabs.has(tabId) || tabId === this.model.activeTabId)) tabId = null;
+    this.splitTabId = tabId;
+    if (tabId !== null) this.tabs.get(tabId)?.ensureLive();
+    this.syncViews();
+    this.pushState();
+  }
+
+  setPanel(panel: PanelKind | null, width?: number): void {
+    if (panel !== undefined) this.panel = this.panel === panel && width === undefined ? this.panel : panel;
+    if (width) this.profile.prefs.set('tabs.panelWidth', width);
+    this.pushState();
+    if (panel) this.app.ensurePanel(this, panel);
+  }
+
+  togglePanel(panel: PanelKind): void {
+    this.setPanel(this.panel === panel ? null : panel);
+  }
+
+  get panelKind(): PanelKind | null {
+    return this.panel;
+  }
+
+  private layoutChrome(): void {
+    const [width, height] = this.win.getContentSize();
+    this.chrome.setBounds({ x: 0, y: 0, width: width!, height: height! });
+  }
+
+  private layoutTabs(): void {
+    const active = this.activeTab();
+    if (this.htmlFullscreen && active?.view) {
+      const [width, height] = this.win.getContentSize();
+      active.view.setBounds({ x: 0, y: 0, width: width!, height: height! });
+      active.view.setBorderRadius(0);
+      return;
+    }
+    const radius = this.profile.prefs.get('tabs.classic') ? 0 : 10;
+    if (active?.view) {
+      active.view.setBounds(roundRect(this.contentRect));
+      active.view.setBorderRadius(radius);
+    }
+    if (this.splitTabId !== null && this.splitRect) {
+      const s = this.tabs.get(this.splitTabId);
+      if (s?.view) {
+        s.view.setBounds(roundRect(this.splitRect));
+        s.view.setBorderRadius(radius);
+      }
+    }
+  }
+
+  /** Attaches exactly the visible tab views (active + split), detaches the rest. */
+  private syncViews(): void {
+    if (this.destroyed) return;
+    const want = new Set<WebContentsView>();
+    const active = this.activeTab();
+    if (active) {
+      active.ensureLive();
+      if (active.view) want.add(active.view);
+    }
+    if (this.splitTabId !== null) {
+      const s = this.tabs.get(this.splitTabId);
+      if (s?.view && this.model.get(this.splitTabId)?.spaceId === this.model.activeSpaceId) want.add(s.view);
+      else this.splitTabId = null;
+    }
+    for (const v of this.attachedViews) if (!want.has(v)) this.detachView(v);
+    for (const v of want) {
+      if (!this.attachedViews.has(v)) {
+        this.win.contentView.addChildView(v, this.overlay.isOpen ? this.win.contentView.children.length - 1 : undefined);
+        this.attachedViews.add(v);
+      }
+    }
+    this.layoutTabs();
+  }
+
+  private detachView(v: WebContentsView | null): void {
+    if (!v || !this.attachedViews.has(v)) return;
+    this.attachedViews.delete(v);
+    try {
+      this.win.contentView.removeChildView(v);
+    } catch {
+      /* already gone */
+    }
+  }
+
+  focusActive(): void {
+    if (this.overlay.isOpen) return;
+    const tab = this.activeTab();
+    const wc = tab?.wc;
+    if (!wc) return;
+    if (tab.url.startsWith('vizulla://newtab')) wc.focus();
+    else wc.focus();
+  }
+
+  // ---------------------------------------------------------------- toasts
+
+  toast(text: string, action?: { label: string; run: () => void }, ms = 6000): void {
+    const id = randomUUID().replace(/-/g, '').slice(0, 12);
+    const timer = setTimeout(() => this.dismissToast(id), ms);
+    this.toasts.push({ id, text, action: action ? { label: action.label, command: id } : undefined, timer, run: action?.run });
+    if (this.toasts.length > 3) this.dismissToast(this.toasts[0]!.id);
+    this.pushState();
+  }
+
+  dismissToast(id: string): void {
+    const i = this.toasts.findIndex((x) => x.id === id);
+    if (i < 0) return;
+    clearTimeout(this.toasts[i]!.timer);
+    this.toasts.splice(i, 1);
+    this.pushState();
+  }
+
+  toastAction(id: string): void {
+    const x = this.toasts.find((y) => y.id === id);
+    x?.run?.();
+    this.dismissToast(id);
+  }
+
+  // ---------------------------------------------------------------- state
+
+  tabInfo(id: number): TabInfo | null {
+    const tab = this.tabs.get(id);
+    const m = this.model.get(id);
+    if (!tab || !m) return null;
+    const i = tab.info();
+    let shown = i.displayUrl;
+    if (tab.url.startsWith('vizulla://error')) {
+      try {
+        shown = displayUrl(new URL(tab.url).searchParams.get('url') ?? '');
+      } catch {
+        /* keep */
+      }
+    }
+    return {
+      id,
+      spaceId: m.spaceId,
+      groupId: m.groupId,
+      pinned: m.pinned,
+      lastActive: m.lastActive,
+      blocked: tab.wc ? this.profile.shields.blockedCount(tab.wc.id) : 0,
+      ...i,
+      url: logicalUrl(tab.url),
+      displayUrl: shown,
+      title: tab.url.startsWith('vizulla://newtab') ? t('tab_new_title') : i.title,
+    };
+  }
+
+  state(): WindowState {
+    const prefs = this.profile.prefs;
+    const spaces = this.profile.spaces.list();
+    const tabs = spaces.flatMap((s) => this.model.visible(s.id).map((m) => this.tabInfo(m.id)!).filter(Boolean));
+    return {
+      windowId: this.chrome.webContents.id,
+      spaces,
+      activeSpaceId: this.model.activeSpaceId,
+      tabs,
+      groups: this.model.groupList(),
+      activeTabId: this.model.activeTabId,
+      splitTabId: this.splitTabId,
+      layout: prefs.get('tabs.classic') ? 'horizontal' : prefs.get('tabs.layout'),
+      classic: prefs.get('tabs.classic'),
+      sidebarCollapsed: prefs.get('tabs.sidebarCollapsed'),
+      sidebarWidth: prefs.get('tabs.sidebarWidth'),
+      panel: this.panel,
+      panelWidth: prefs.get('tabs.panelWidth'),
+      toasts: this.toasts.map(({ id, text, action }) => ({ id, text, action })),
+      archiveCount: this.profile.spaces.archiveCount(this.model.activeSpaceId),
+      asleepCount: tabs.filter((x) => x.discarded && x.spaceId === this.model.activeSpaceId).length,
+      agent: this.app.agentBarState(this),
+      platform: this.profile.isPrivate ? `${process.platform}:private` : process.platform,
+      locale: this.app.locale,
+      theme: prefs.get('appearance.theme'),
+      accent: spaces.find((s) => s.id === this.model.activeSpaceId)?.color ?? prefs.get('appearance.accent'),
+      density: prefs.get('appearance.density'),
+      aiMode: prefs.get('ai.mode'),
+      features: this.profile.features.snapshot(),
+      fullscreen: this.win.isFullScreen() || this.htmlFullscreen,
+      bookmarks: prefs.get('tabs.classic') ? this.profile.history.bookmarks().slice(0, 30).map((b) => ({ url: b.url, title: b.title })) : [],
+    };
+  }
+
+  pushState(immediate = false): void {
+    if (this.destroyed || !this.chromeReady) return;
+    if (immediate) {
+      if (this.stateTimer) clearTimeout(this.stateTimer);
+      this.stateTimer = null;
+      emitTo(this.chrome.webContents, 'Shell', 'state', this.state());
+      this.emit('state');
+      return;
+    }
+    if (this.stateTimer) return;
+    this.stateTimer = setTimeout(() => {
+      this.stateTimer = null;
+      if (!this.destroyed) {
+        emitTo(this.chrome.webContents, 'Shell', 'state', this.state());
+        this.emit('state');
+      }
+    }, 16);
+  }
+
+  sessionSnapshot(): SessionWindow {
+    const b = this.win.getNormalBounds();
+    return {
+      key: this.key,
+      activeSpaceId: this.model.activeSpaceId,
+      bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+      groups: this.model.groupList(),
+      tabs: this.model
+        .all()
+        .filter((m) => !this.tabs.get(m.id)?.agent)
+        .map((m) => {
+          const tab = this.tabs.get(m.id)!;
+          return {
+            spaceId: m.spaceId, groupId: m.groupId, pinned: m.pinned, url: logicalUrl(tab.url), title: tab.title, favicon: tab.favicon,
+            nav: tab.navState(), lastActive: m.lastActive, active: this.model.activeForSpace(m.spaceId) === m.id,
+          };
+        }),
+    };
+  }
+
+  private scheduleSave(): void {
+    if (this.profile.isPrivate || this.destroyed || this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      if (!this.destroyed) this.profile.spaces.saveWindow(this.sessionSnapshot());
+    }, 800);
+  }
+
+  saveNow(): void {
+    if (this.profile.isPrivate || this.destroyed) return;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.profile.spaces.saveWindow(this.sessionSnapshot());
+  }
+
+  resolvedTheme(): 'light' | 'dark' | 'high-contrast' {
+    const pref = this.profile.prefs.get('appearance.theme');
+    if (pref === 'high-contrast' || nativeTheme.shouldUseHighContrastColors) return 'high-contrast';
+    if (pref === 'light' || pref === 'dark') return pref;
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  }
+
+  copyUrl(): void {
+    const tab = this.activeTab();
+    if (!tab) return;
+    clipboard.writeText(tab.url);
+    this.toast(t('toast_copied_url'), undefined, 2000);
+  }
+
+  showMenuAt(menu: Menu, point?: { x: number; y: number }): void {
+    menu.popup({ window: this.win as unknown as Electron.BrowserWindow, ...(point ? { x: Math.round(point.x), y: Math.round(point.y) } : {}) });
+  }
+
+  private onClose(): void {
+    if (this.destroyed) return;
+    // The last regular window keeps its session for restore; others forget theirs.
+    // Quitting: the session was saved in prepareToQuit(). Closing one of several
+    // windows forgets it; closing the last one keeps it for restore.
+    if (!this.profile.isPrivate && !this.app.quitting) {
+      if (this.app.windowsOf(this.profile).length > 1) this.profile.spaces.forgetWindow(this.key);
+      else this.saveNow();
+    }
+    this.destroyed = true;
+    if (this.stateTimer) clearTimeout(this.stateTimer);
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    for (const tab of this.tabs.values()) tab.destroy();
+    this.tabs.clear();
+    this.overlay.destroy();
+    if (!this.chrome.webContents.isDestroyed()) this.chrome.webContents.close();
+    this.app.onWindowClosed(this);
+  }
+
+  get isDestroyed(): boolean {
+    return this.destroyed;
+  }
+}
+
+function roundRect(r: Rect): Rect {
+  return { x: Math.round(r.x), y: Math.round(r.y), width: Math.max(0, Math.round(r.width)), height: Math.max(0, Math.round(r.height)) };
+}
+
+function defaultBounds() {
+  const { workArea } = screen.getPrimaryDisplay();
+  const width = Math.min(1440, Math.round(workArea.width * 0.86));
+  const height = Math.min(940, Math.round(workArea.height * 0.88));
+  return { width, height, x: workArea.x + Math.round((workArea.width - width) / 2), y: workArea.y + Math.round((workArea.height - height) / 2) };
+}
+
+export const WEBUI_PRELOAD = (outDir: string) => join(outDir, 'preload', 'webui_preload.js');
