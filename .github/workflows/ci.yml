@@ -31,6 +31,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      # Unit tests import electron; npm ≥ 11 may skip install scripts.
+      - name: Install Electron binary
+        # GitHub's release-asset CDN sometimes answers 504; retry with backoff.
+        shell: bash
+        run: for i in 1 2 3 4 5; do node node_modules/electron/install.js && exit 0; echo "retry $i"; sleep $((i * 20)); done; exit 1
       - name: Lint (typecheck, string coverage, feature flags)
         run: node tools/vz.mjs lint
       - name: Unit tests
@@ -70,7 +75,9 @@ jobs:
       - run: npm ci
       # npm ≥ 11 may skip install scripts; fetch the Electron binary explicitly.
       - name: Install Electron binary
-        run: node node_modules/electron/install.js
+        # GitHub's release-asset CDN sometimes answers 504; retry with backoff.
+        shell: bash
+        run: for i in 1 2 3 4 5; do node node_modules/electron/install.js && exit 0; echo "retry $i"; sleep $((i * 20)); done; exit 1
       - name: Build
         run: node tools/vz.mjs build
       - name: E2E tests

@@ -67,7 +67,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install Electron binary
-        run: node node_modules/electron/install.js
+        # GitHub's release-asset CDN sometimes answers 504; retry with backoff.
+        shell: bash
+        run: for i in 1 2 3 4 5; do node node_modules/electron/install.js && exit 0; echo "retry $i"; sleep $((i * 20)); done; exit 1
       - name: Check that the tag matches package.json
         shell: bash
         run: |
@@ -83,7 +85,8 @@ jobs:
           if [ -z "${CSC_LINK:-}" ]; then export CSC_IDENTITY_AUTO_DISCOVERY=false; echo "::notice::No signing certificate: building unsigned installers"; fi
           EXTRA=""
           if [ -n "${APPLE_ID:-}" ]; then EXTRA="-c.mac.notarize=true"; fi
-          npx electron-builder ${{ matrix.target }} --publish never $EXTRA
+          # electron-builder downloads Electron for each target arch; retry CDN hiccups.
+          for i in 1 2 3; do npx electron-builder ${{ matrix.target }} --publish never $EXTRA && exit 0; echo "retry $i"; sleep $((i * 30)); done; exit 1
         env:
           CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || secrets.CSC_KEY_PASSWORD }}
