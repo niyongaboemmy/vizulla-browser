@@ -1,8 +1,8 @@
 // Calm start page (P2-BRW-17): a search pill and shortcut tiles. No feeds, no remote
 // content, zero network requests. Text is minimal: icons and tiles carry meaning.
-import { css, html, nothing } from 'lit';
+import { css, html, nothing, unsafeCSS } from 'lit';
 import { base, pageStyles } from '../shared/styles';
-import { icon } from '../shared/icons';
+import { icon, logo } from '../shared/icons';
 import { VzPage } from '../shared/page_base';
 import { t } from '@vz/common/i18n';
 import type { SpaceInfo, TabInfo } from '@vz/common/types';
@@ -34,11 +34,9 @@ class VzNewTab extends VzPage<Data> {
     css`
       :host { display: grid; place-items: start center; min-height: 100vh; background:
         radial-gradient(900px 500px at 15% -10%, color-mix(in srgb, var(--vz-accent) 14%, transparent), transparent 70%),
-        radial-gradient(800px 500px at 100% 0%, color-mix(in srgb, #22d3ee 10%, transparent), transparent 70%), var(--vz-toolbar); }
+        radial-gradient(800px 500px at 100% 0%, color-mix(in srgb, var(--vz-accent) 8%, transparent), transparent 70%), var(--vz-toolbar); }
       .wrap { width: min(640px, calc(100vw - 48px)); padding-top: 16vh; display: flex; flex-direction: column; align-items: center; }
-      .glyph { width: 72px; height: 72px; border-radius: 24px; display: grid; place-items: center; color: #fff; margin-bottom: 28px;
-        background: linear-gradient(135deg, var(--vz-accent), color-mix(in srgb, var(--vz-accent) 40%, #22d3ee));
-        box-shadow: 0 16px 40px -12px color-mix(in srgb, var(--vz-accent) 60%, transparent); animation: float 5s ease-in-out infinite; }
+      .glyph { display: grid; margin-bottom: 28px; animation: float 5s ease-in-out infinite; }
       @keyframes float { 50% { transform: translateY(-6px) rotate(3deg); } }
       .bar { width: 100%; display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 10px 0 20px; border-radius: 999px; cursor: text;
         background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border);
@@ -50,19 +48,22 @@ class VzNewTab extends VzPage<Data> {
       .tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 36px; width: 100%; }
       .tile { all: unset; box-sizing: border-box; width: 96px; height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
         border-radius: 18px; cursor: pointer; transition: background var(--vz-dur), transform var(--vz-dur) var(--vz-ease); position: relative; }
-      .tile:hover { background: var(--vz-surface-hover); transform: translateY(-2px); }
+      .tile:hover { background: var(--vz-surface-hover); transform: translateY(-3px); }
+      .tile:active { transform: scale(.96); }
+      .tiles > * { animation: vz-rise 380ms var(--vz-ease) both; }
+      ${unsafeCSS(Array.from({ length: 16 }, (_, i) => `.tiles > :nth-child(${i + 1}) { animation-delay: ${120 + i * 35}ms; }`).join('\n'))}
       .tile:focus-visible { outline: 2px solid var(--vz-focus); }
       .bubble { position: relative; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 20px; color: #fff;
-        background: hsl(var(--h) 70% 52%); box-shadow: 0 6px 16px -8px hsl(var(--h) 70% 40%); }
-      .bubble.fav { background: var(--vz-glass-strong); box-shadow: 0 0 0 1px var(--vz-border), 0 6px 16px -10px rgba(0,0,0,.4); }
+        background: hsl(var(--h) 70% 52%); }
+      .bubble.fav { background: var(--vz-glass-strong); box-shadow: 0 0 0 1px var(--vz-border); }
       .bubble img { width: 26px; height: 26px; }
       .label { max-width: 88px; font-size: 12px; color: var(--vz-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .badge { position: absolute; top: 12px; right: 18px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
         background: var(--vz-toolbar); color: var(--vz-text-2); box-shadow: 0 0 0 1px var(--vz-border); }
       .actions { display: flex; gap: 10px; margin-top: 28px; }
-      .act { width: 44px; height: 44px; border-radius: 14px; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2);
+      .act { width: 44px; height: 44px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2);
         background: var(--vz-glass-strong); box-shadow: 0 0 0 1px var(--vz-border); transition: all var(--vz-dur) var(--vz-ease); }
-      .act:hover { color: var(--vz-accent); transform: translateY(-2px); box-shadow: 0 0 0 1px var(--vz-accent), 0 8px 20px -10px var(--vz-accent); }
+      .act:hover { color: var(--vz-accent); transform: translateY(-2px); box-shadow: 0 0 0 1px var(--vz-accent); }
       .space { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--vz-accent); background: var(--vz-accent-soft); }
     `,
   ];
@@ -84,9 +85,9 @@ class VzNewTab extends VzPage<Data> {
     const seen = new Set<string>();
     const recent = d.recent.filter((r) => !seen.has(hostOf(r.url)) && seen.add(hostOf(r.url)));
     return html`<div class="wrap">
-      <div class="glyph">${icon('sparkle', 34)}</div>
+      <div class="glyph rise">${logo(64)}</div>
       ${d.space ? html`<span class="space">${icon(d.space.icon, 12)} ${d.space.name}</span>` : nothing}
-      <div class="bar" role="button" tabindex="0"
+      <div class="bar rise" style="--i:2" role="button" tabindex="0"
         @click=${() => this.invoke('openCommandBar')} @keydown=${(e: KeyboardEvent) => e.key !== 'Tab' && this.invoke('openCommandBar')}>
         ${icon('search', 20)}<span class="grow"><span class="sr-only">${t('cb_placeholder')} · </span>${d.engine}</span><span class="kbd" aria-hidden="true">${mac ? '⌘K' : 'Ctrl K'}</span>
         ${d.aiMode !== 'off' ? html`<span class="mic" aria-hidden="true">${icon('sparkle', 16)}</span>` : nothing}

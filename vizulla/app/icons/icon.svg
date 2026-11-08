@@ -1,12 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Vizulla mark: two glass panes (tabs/windows) meeting in a V.
+       One solid, one translucent: the overlap is where the page comes into view.
+       Flat blue, no shadows. macOS grid: 824px tile on a 1024 canvas. -->
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4f46e5"/><stop offset="0.55" stop-color="#6d5ef0"/><stop offset="1" stop-color="#22d3ee"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
     </linearGradient>
-    <radialGradient id="h" cx="0.3" cy="0.2" r="0.8"><stop offset="0" stop-color="#fff" stop-opacity="0.28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect x="80" y="80" width="864" height="864" rx="200" fill="url(#g)"/>
-  <rect x="80" y="80" width="864" height="864" rx="200" fill="url(#h)"/>
-  <path d="M512 232l58 172 172 50-172 50-58 172-58-172-172-50 172-50z" fill="#fff"/>
-  <path d="M724 604l22 62 62 22-62 22-22 62-22-62-62-22 62-22z" fill="#fff" fill-opacity="0.85"/>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)"/>
+  <g stroke-linecap="round" stroke-width="136" fill="none">
+    <line x1="650" y1="312" x2="512" y2="712" stroke="#ffffff" stroke-opacity="0.55"/>
+    <line x1="374" y1="312" x2="512" y2="712" stroke="#ffffff"/>
+  </g>
 </svg>

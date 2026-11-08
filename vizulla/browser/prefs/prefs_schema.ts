@@ -1,7 +1,7 @@
 // Profile preferences: one typed schema with defaults. Renderers never read prefs
 // directly (handbook §5); WebUI pages get the subset their PageHandler exposes.
 import type { AiMode, SpaceColor, TabLayout, ThemePref } from '@vz/common/types';
-import type { SearchEngineId } from '@vz/common/url';
+import { isValidEngineTemplate, type CustomEngine, type SearchEngineId } from '@vz/common/url';
 
 export type ProviderId = 'gateway' | 'anthropic' | 'openai' | 'google' | 'openai-compatible' | 'local';
 
@@ -22,7 +22,11 @@ export interface Prefs {
   'tabs.memorySaverMinutes': number;
   'tabs.discardExemptSites': string[];
   'tabs.restoreOnStartup': boolean;
+  'updates.autoCheck': boolean;
+  'passwords.offerToSave': boolean;
+  'passwords.neverSave': string[];
   'search.engine': SearchEngineId;
+  'search.custom': CustomEngine | null;
   'search.chosen': boolean;
   'shields.enabled': boolean;
   'shields.aggressive': boolean;
@@ -76,7 +80,11 @@ export const DEFAULT_PREFS: Prefs = {
   'tabs.memorySaverMinutes': 30,
   'tabs.discardExemptSites': [],
   'tabs.restoreOnStartup': true,
+  'updates.autoCheck': true,
+  'passwords.offerToSave': true,
+  'passwords.neverSave': [],
   'search.engine': 'duckduckgo',
+  'search.custom': null,
   'search.chosen': false,
   'shields.enabled': true,
   'shields.aggressive': false,
@@ -135,7 +143,11 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'tabs.archiveAfterHours': (v) => typeof v === 'number' && v >= 1 && v <= 24 * 30,
   'tabs.memorySaverMinutes': (v) => typeof v === 'number' && v >= 0 && v <= 24 * 60,
   'tabs.restoreOnStartup': (v) => typeof v === 'boolean',
-  'search.engine': (v) => ['duckduckgo', 'google', 'bing', 'brave', 'startpage', 'ecosia', 'qwant'].includes(v as string),
+  'updates.autoCheck': (v) => typeof v === 'boolean',
+  'passwords.offerToSave': (v) => typeof v === 'boolean',
+  'passwords.neverSave': (v) => Array.isArray(v) && v.length <= 500 && v.every((x) => typeof x === 'string' && x.length <= 512),
+  'search.engine': (v) => ['duckduckgo', 'google', 'bing', 'brave', 'startpage', 'ecosia', 'qwant', 'custom'].includes(v as string),
+  'search.custom': (v) => v === null || (typeof v === 'object' && typeof (v as CustomEngine).name === 'string' && (v as CustomEngine).name.trim().length > 0 && (v as CustomEngine).name.length <= 40 && isValidEngineTemplate((v as CustomEngine).url)),
   'search.chosen': (v) => typeof v === 'boolean',
   'shields.enabled': (v) => typeof v === 'boolean',
   'shields.aggressive': (v) => typeof v === 'boolean',

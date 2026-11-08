@@ -35,11 +35,11 @@ class VzAssistant extends LitElement {
       .scroll { flex: 1; overflow-y: auto; padding: 4px 14px 14px; min-height: 0; }
       .quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 12px; }
       .quick { justify-content: center; gap: 10px; }
-      .quick button { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; border: 0; background: var(--vz-surface-2); cursor: pointer; color: var(--vz-text-2); transition: all var(--vz-dur) var(--vz-ease); }
-      .quick button:hover:not([disabled]) { background: var(--vz-accent-soft); color: var(--vz-accent); transform: translateY(-2px); box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--vz-accent) 50%, transparent); }
+      .quick button { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--vz-surface-2); cursor: pointer; color: var(--vz-text-2); transition: all var(--vz-dur) var(--vz-ease); }
+      .quick button:hover:not([disabled]) { background: var(--vz-accent-soft); color: var(--vz-accent); transform: translateY(-2px); }
       .quick button[aria-pressed='true'] { background: var(--vz-accent); color: var(--vz-on-accent); }
       .empty { text-align: center; padding: 30px 12px 10px; color: var(--vz-text-2); }
-      .empty .orb { width: 64px; height: 64px; border-radius: 22px; margin: 18px auto 14px; animation: float 4s ease-in-out infinite; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--vz-accent), color-mix(in srgb, var(--vz-accent) 35%, #22d3ee)); box-shadow: 0 10px 30px color-mix(in srgb, var(--vz-accent) 35%, transparent); }
+      .empty .orb { width: 64px; height: 64px; border-radius: 22px; margin: 18px auto 14px; animation: float 4s ease-in-out infinite; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--vz-accent), color-mix(in srgb, var(--vz-accent) 35%, #22d3ee)); }
       @keyframes float { 50% { transform: translateY(-6px) rotate(4deg); } }
       .empty h3 { margin: 0 0 6px; color: var(--vz-text); font-size: 15px; font-weight: 650; }
       .empty p { margin: 0; font-size: var(--vz-text-s); line-height: 1.5; }
@@ -151,7 +151,7 @@ class VzAssistant extends LitElement {
       </div>
       ${this.picking ? this.renderPicker() : nothing}
       <div class="composer">
-        <textarea rows="1" .value=${this.draft} placeholder=${this.picking ? t('ai_compare_placeholder') : t('cb_ask_placeholder')} aria-label=${t('cb_ask_placeholder')} ?disabled=${blocked}
+        <textarea class="bare" rows="1" .value=${this.draft} placeholder=${this.picking ? t('ai_compare_placeholder') : t('cb_ask_placeholder')} aria-label=${t('cb_ask_placeholder')} ?disabled=${blocked}
           @input=${(e: InputEvent) => {
             const el = e.target as HTMLTextAreaElement;
             this.draft = el.value;

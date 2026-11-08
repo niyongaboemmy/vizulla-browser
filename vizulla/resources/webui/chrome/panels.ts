@@ -21,7 +21,8 @@ export class VzPanels extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+      :host { display: flex; flex-direction: column; height: 100%; min-width: 0; animation: panel-in 260ms var(--vz-ease); }
+      @keyframes panel-in { from { opacity: 0; transform: translateX(16px); } }
       .card { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--vz-toolbar); overflow: hidden; }
       .tabs { display: flex; align-items: center; gap: 2px; padding: 8px 8px 4px; }
       .tabs > * { -webkit-app-region: no-drag; }

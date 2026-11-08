@@ -14,18 +14,26 @@ export const ACCENTS: Record<SpaceColor, { light: string; dark: string; soft: st
   slate: { light: '#475569', dark: '#94a3b8', soft: '#eef1f5', softDark: '#262c36' },
 };
 
+/** Brand primary (Vizulla blue). Space colors tint Space chips only. */
+export const BRAND = { light: '#2563eb', dark: '#60a5fa', soft: '#e8f0fe', softDark: '#16294a' } as const;
+
+/** Profile avatar colors (white initial on top; all pass 4.5:1). */
+export const PROFILE_HEX: Record<string, string> = {
+  blue: '#2563eb', violet: '#7c3aed', rose: '#e11d48', amber: '#b45309', emerald: '#047857', teal: '#0f766e', sky: '#0369a1', slate: '#475569',
+};
+
 export const THEMES = {
   light: {
-    '--vz-frame': '#e3e7ee',
+    '--vz-frame': '#e9eef6',
     '--vz-toolbar': '#ffffff',
-    '--vz-omnibox': '#eef1f6',
-    '--vz-omnibox-hover': '#e4e8ef',
+    '--vz-omnibox': '#f0f4fa',
+    '--vz-omnibox-hover': '#e6ecf5',
     '--vz-tab-hover': 'rgba(255,255,255,0.55)',
-    '--vz-glass': 'rgba(255,255,255,0.74)',
-    '--vz-glass-strong': 'rgba(255,255,255,0.88)',
-    '--vz-glass-border': 'rgba(255,255,255,0.7)',
-    '--vz-glass-shadow': '0 0 0 1px rgba(15,23,42,.06), 0 12px 32px -8px rgba(15,23,42,.18), 0 32px 80px -24px rgba(15,23,42,.28)',
-    '--vz-bg': '#eceef3',
+    '--vz-glass': 'rgba(255,255,255,0.68)',
+    '--vz-glass-strong': 'rgba(255,255,255,0.82)',
+    '--vz-glass-border': 'rgba(37,99,235,0.14)',
+    '--vz-glass-shadow': 'none',
+    '--vz-bg': '#eef2f8',
     '--vz-bg-elev': '#ffffff',
     '--vz-surface': 'rgba(255,255,255,0.72)',
     '--vz-surface-2': 'rgba(15,23,42,0.045)',
@@ -39,8 +47,8 @@ export const THEMES = {
     '--vz-danger': '#dc2626',
     '--vz-warn': '#92400e',
     '--vz-ok': '#166534',
-    '--vz-shadow': '0 1px 2px rgba(15,23,42,.06), 0 8px 24px rgba(15,23,42,.08)',
-    '--vz-shadow-pop': '0 2px 6px rgba(15,23,42,.08), 0 24px 64px rgba(15,23,42,.22)',
+    '--vz-shadow': 'none',
+    '--vz-shadow-pop': 'none',
     '--vz-backdrop': 'rgba(15,23,42,0.28)',
     '--vz-focus': '#2563eb',
   },
@@ -50,10 +58,10 @@ export const THEMES = {
     '--vz-omnibox': '#1c1e23',
     '--vz-omnibox-hover': '#15171b',
     '--vz-tab-hover': 'rgba(255,255,255,0.06)',
-    '--vz-glass': 'rgba(38,40,46,0.72)',
-    '--vz-glass-strong': 'rgba(38,40,46,0.9)',
-    '--vz-glass-border': 'rgba(255,255,255,0.09)',
-    '--vz-glass-shadow': '0 0 0 1px rgba(0,0,0,.4), 0 12px 32px -8px rgba(0,0,0,.5), 0 32px 80px -24px rgba(0,0,0,.6)',
+    '--vz-glass': 'rgba(30,34,44,0.66)',
+    '--vz-glass-strong': 'rgba(30,34,44,0.84)',
+    '--vz-glass-border': 'rgba(147,197,253,0.16)',
+    '--vz-glass-shadow': 'none',
     '--vz-bg': '#16181d',
     '--vz-bg-elev': '#1f2229',
     '--vz-surface': 'rgba(32,35,43,0.78)',
@@ -68,8 +76,8 @@ export const THEMES = {
     '--vz-danger': '#f87171',
     '--vz-warn': '#fbbf24',
     '--vz-ok': '#4ade80',
-    '--vz-shadow': '0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35)',
-    '--vz-shadow-pop': '0 2px 8px rgba(0,0,0,.5), 0 24px 64px rgba(0,0,0,.55)',
+    '--vz-shadow': 'none',
+    '--vz-shadow-pop': 'none',
     '--vz-backdrop': 'rgba(0,0,0,0.45)',
     '--vz-focus': '#60a5fa',
   },
@@ -139,8 +147,9 @@ export function cssVariables(theme: ResolvedTheme, accent: SpaceColor): Record<s
   return {
     ...SCALE,
     ...THEMES[theme],
-    '--vz-accent': theme === 'high-contrast' ? '#ffd60a' : dark ? a.dark : a.light,
-    '--vz-accent-soft': theme === 'high-contrast' ? '#000000' : dark ? a.softDark : a.soft,
+    '--vz-accent': theme === 'high-contrast' ? '#ffd60a' : dark ? BRAND.dark : BRAND.light,
+    '--vz-accent-soft': theme === 'high-contrast' ? '#000000' : dark ? BRAND.softDark : BRAND.soft,
+    '--vz-space': theme === 'high-contrast' ? '#ffd60a' : dark ? a.dark : a.light,
     '--vz-on-accent': dark ? '#0b0d12' : '#ffffff',
   };
 }

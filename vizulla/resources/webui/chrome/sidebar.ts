@@ -2,6 +2,8 @@
 // address pill that opens the Command Bar. Tabs drag to reorder, into/out of
 // groups and the pinned zone, and onto Space icons. Horizontal two-finger swipe
 // switches Spaces. Fully keyboard operable (arrow keys move through tabs).
+// Cmd/Ctrl/Shift-click selects several tabs; tabs drag between windows or out
+// into a new one.
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base } from '../shared/styles';
 import { icon } from '../shared/icons';
@@ -10,6 +12,7 @@ import type { GroupInfo, SpaceInfo, TabInfo, WindowState } from '@vz/common/type
 import { ACCENTS } from '@vz/common/tokens';
 import { shell } from './shell';
 import { favicon, securityIcon } from './common';
+import { TabSelection, draggedTabIds, endTabDrag, isTabDrag, startTabDrag } from './tab_selection';
 
 type DropTarget = { index: number; groupId: string | null | undefined; zone: 'pinned' | 'list' } | null;
 
@@ -20,6 +23,8 @@ export class VzSidebar extends LitElement {
   dragging: number | null = null;
   swipe = 0;
   renaming: string | null = null;
+  private dragIds: number[] = [];
+  private readonly sel = new TabSelection(this);
   private wheelAcc = 0;
   private wheelTimer = 0;
 
@@ -54,7 +59,7 @@ export class VzSidebar extends LitElement {
         cursor: pointer; position: relative; transition: background var(--vz-dur), transform var(--vz-dur) var(--vz-ease);
       }
       .pin:hover { background: var(--vz-surface-hover); }
-      .pin.active { background: var(--vz-bg-elev); box-shadow: var(--vz-shadow); border-color: var(--vz-border); }
+      .pin.active { background: var(--vz-bg-elev); border-color: var(--vz-glass-border); }
       .pin img, .pin .vz-icon { width: 20px; height: 20px; }
       .pin .dot { position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--vz-accent); }
       .pinned.drop { outline: 2px dashed var(--vz-accent); outline-offset: 2px; border-radius: var(--vz-radius); }
@@ -74,10 +79,12 @@ export class VzSidebar extends LitElement {
       }
       :host-context([data-density=compact]) .tab { --row-h: 28px; }
       .tab:hover { background: var(--vz-surface-hover); }
-      .tab.active { background: var(--vz-bg-elev); box-shadow: var(--vz-shadow); }
+      .tab.active { background: var(--vz-bg-elev); box-shadow: 0 0 0 1px var(--vz-glass-border); }
       .tab:focus-visible { outline: 2px solid var(--vz-focus); outline-offset: -2px; }
       .tab.discarded .title, .tab.discarded img { opacity: 0.55; }
       .tab.dragging { opacity: 0.4; }
+      .tab.selected:not(.active), .pin.selected:not(.active) { background: var(--vz-accent-soft); color: var(--vz-text); }
+      .tab.selected.active, .pin.selected.active { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--vz-accent) 45%, transparent); }
       .tab .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--vz-text-m); }
       .tab .x { opacity: 0; width: 22px; height: 22px; }
       .tab:hover .x, .tab.active .x, .tab:focus-within .x { opacity: 1; }
@@ -98,18 +105,18 @@ export class VzSidebar extends LitElement {
 
       .footer { display: flex; align-items: center; gap: 2px; padding-top: 6px; border-top: 1px solid var(--vz-border); }
       .spaces { flex: 1; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-      .space-btn { width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); position: relative; flex: none; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .space-btn { width: 30px; height: 30px; border-radius: 50%; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); position: relative; flex: none; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .space-btn:hover { background: var(--vz-surface-hover); color: var(--vz-text); }
       .space-btn.active { color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
       .space-btn.drop { transform: scale(1.18); background: color-mix(in srgb, var(--c) 26%, transparent); color: var(--c); }
       .meta { display: flex; gap: 6px; padding: 4px 6px 0; font-size: var(--vz-text-xs); color: var(--vz-text-3); }
-      .meta button { border: 0; background: transparent; color: inherit; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; padding: 2px 4px; border-radius: 4px; font-size: inherit; }
+      .meta button { border: 0; background: transparent; color: inherit; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; padding: 2px 4px; border-radius: 999px; font-size: inherit; }
       .meta button:hover { background: var(--vz-surface-hover); color: var(--vz-text-2); }
 
       .toasts { position: absolute; left: 8px; right: 0; bottom: 74px; display: flex; flex-direction: column; gap: 6px; z-index: 3; }
       .toast { display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 12px; border-radius: var(--vz-radius); background: var(--vz-text); color: var(--vz-bg-elev); box-shadow: var(--vz-shadow-pop); font-size: var(--vz-text-s); animation: pop 220ms var(--vz-ease); }
       .toast span { flex: 1; }
-      .toast button { border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 700; font-size: inherit; padding: 2px 4px; border-radius: 4px; }
+      .toast button { border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 700; font-size: inherit; padding: 2px 4px; border-radius: 999px; }
       .toast button:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
       @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
     `,
@@ -123,9 +130,23 @@ export class VzSidebar extends LitElement {
     return this.state.tabs.filter((x) => x.spaceId === this.state.activeSpaceId);
   }
 
+  private get order(): number[] {
+    return this.spaceTabs.map((x) => x.id);
+  }
+
+  private clickTab(e: MouseEvent, id: number): void {
+    if (!this.sel.click(e, id, this.order, this.state.activeTabId)) void shell.activateTab(id);
+  }
+
+  private tabMenu(e: MouseEvent, id: number): void {
+    e.preventDefault();
+    void shell.showTabMenu(id, { x: e.clientX, y: e.clientY }, this.sel.has(id) ? this.sel.targets(id, this.order) : undefined);
+  }
+
   override render() {
     const s = this.state;
     const mac = s.platform.startsWith('darwin');
+    this.sel.prune(this.order);
     const active = s.tabs.find((x) => x.id === s.activeTabId);
     const tabs = this.spaceTabs;
     const pinned = tabs.filter((x) => x.pinned);
@@ -171,7 +192,7 @@ export class VzSidebar extends LitElement {
             }}
             @drop=${(e: DragEvent) => {
               e.preventDefault();
-              if (this.dragging !== null) void shell.moveTabToSpace(this.dragging, sp.id);
+              if (this.dragging !== null) this.dragIds.forEach((id) => void shell.moveTabToSpace(id, sp.id));
               this.endDrag();
             }}>${icon(sp.icon, 16)}</button>`)}
         </div>
@@ -219,11 +240,11 @@ export class VzSidebar extends LitElement {
 
   private renderPin(x: TabInfo): TemplateResult {
     const active = x.id === this.state.activeTabId;
-    return html`<div class="pin ${active ? 'active' : ''}" role="listitem" tabindex="0" title=${x.title} aria-label=${x.title} aria-current=${active ? 'page' : 'false'}
-      draggable="true" @dragstart=${(e: DragEvent) => this.startDrag(e, x.id)} @dragend=${() => this.endDrag()}
-      @click=${() => shell.activateTab(x.id)} @keydown=${(e: KeyboardEvent) => e.key === 'Enter' && shell.activateTab(x.id)}
+    return html`<div class="pin ${active ? 'active' : ''} ${this.sel.has(x.id) ? 'selected' : ''}" role="listitem" tabindex="0" title=${x.title} aria-label=${x.title} aria-current=${active ? 'page' : 'false'}
+      draggable="true" @dragstart=${(e: DragEvent) => this.startDrag(e, x)} @dragend=${(e: DragEvent) => this.endDrag(e)}
+      @click=${(e: MouseEvent) => this.clickTab(e, x.id)} @keydown=${(e: KeyboardEvent) => e.key === 'Enter' && shell.activateTab(x.id)}
       @auxclick=${(e: MouseEvent) => e.button === 1 && shell.closeTab(x.id)}
-      @contextmenu=${(e: MouseEvent) => (e.preventDefault(), shell.showTabMenu(x.id, { x: e.clientX, y: e.clientY }))}>
+      @contextmenu=${(e: MouseEvent) => this.tabMenu(e, x.id)}>
       ${favicon(x, 20)}${x.audible ? html`<span class="dot"></span>` : nothing}
     </div>`;
   }
@@ -290,12 +311,12 @@ export class VzSidebar extends LitElement {
     const active = x.id === this.state.activeTabId;
     const showLine = this.drop && this.drop.zone === 'list' && this.drop.index === index && this.dragging !== x.id;
     return html`${showLine ? html`<div class="drop-line"></div>` : nothing}
-      <div class="tab ${active ? 'active' : ''} ${x.discarded ? 'discarded' : ''} ${this.dragging === x.id ? 'dragging' : ''} ${this.state.splitTabId === x.id ? 'split' : ''}"
-        role="treeitem" tabindex=${active ? 0 : -1} aria-selected=${active} aria-label=${x.title + (x.audible ? `, ${t('tab_playing_audio')}` : '') + (x.discarded ? `, ${t('tab_asleep')}` : '')}
+      <div class="tab ${active ? 'active' : ''} ${this.sel.has(x.id) ? 'selected' : ''} ${x.discarded ? 'discarded' : ''} ${this.dragIds.includes(x.id) ? 'dragging' : ''} ${this.state.splitTabId === x.id ? 'split' : ''}"
+        role="treeitem" tabindex=${active ? 0 : -1} aria-selected=${active || this.sel.has(x.id)} aria-label=${x.title + (x.audible ? `, ${t('tab_playing_audio')}` : '') + (x.discarded ? `, ${t('tab_asleep')}` : '')}
         data-id=${x.id} draggable="true" title=${`${x.title}\n${x.displayUrl}`}
-        @click=${() => shell.activateTab(x.id)} @auxclick=${(e: MouseEvent) => e.button === 1 && shell.closeTab(x.id)}
-        @contextmenu=${(e: MouseEvent) => (e.preventDefault(), shell.showTabMenu(x.id, { x: e.clientX, y: e.clientY }))}
-        @dragstart=${(e: DragEvent) => this.startDrag(e, x.id)} @dragend=${() => this.endDrag()}
+        @click=${(e: MouseEvent) => this.clickTab(e, x.id)} @auxclick=${(e: MouseEvent) => e.button === 1 && shell.closeTab(x.id)}
+        @contextmenu=${(e: MouseEvent) => this.tabMenu(e, x.id)}
+        @dragstart=${(e: DragEvent) => this.startDrag(e, x)} @dragend=${(e: DragEvent) => this.endDrag(e)}
         @dragover=${(e: DragEvent) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const after = e.clientY > r.top + r.height / 2;
@@ -318,19 +339,21 @@ export class VzSidebar extends LitElement {
     return document.documentElement.dataset.theme === 'light' ? a.light : a.dark;
   }
 
-  private startDrag(e: DragEvent, id: number): void {
-    this.dragging = id;
-    e.dataTransfer!.effectAllowed = 'move';
-    e.dataTransfer!.setData('application/x-vizulla-tab', String(id));
+  private startDrag(e: DragEvent, x: TabInfo): void {
+    this.dragging = x.id;
+    this.dragIds = this.sel.targets(x.id, this.order);
+    startTabDrag(e, this.dragIds, x.url);
   }
 
-  private endDrag(): void {
+  private endDrag(e?: DragEvent): void {
+    if (e) endTabDrag(e, this.dragIds);
     this.dragging = null;
+    this.dragIds = [];
     this.drop = null;
   }
 
   private onDragOver(e: DragEvent, target: NonNullable<DropTarget>): void {
-    if (this.dragging === null) return;
+    if (this.dragging === null && !isTabDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer!.dropEffect = 'move';
@@ -341,9 +364,20 @@ export class VzSidebar extends LitElement {
     e.preventDefault();
     e.stopPropagation();
     const id = this.dragging;
+    const ids = this.dragIds;
     const d = this.drop;
     this.endDrag();
-    if (id === null || !d || d.index < 0) return;
+    if (!d || d.index < 0) return;
+    if (id === null) {
+      // Tabs dragged in from another window.
+      const foreign = draggedTabIds(e);
+      if (foreign.length) void shell.adoptTabs(foreign, Math.max(d.index, 0));
+      return;
+    }
+    if (ids.length > 1) {
+      ids.forEach((x, k) => void shell.moveTab(x, Math.max(d.index, 0) + k, d.groupId === undefined ? undefined : (d.groupId ?? '')));
+      return;
+    }
     const tabs = this.spaceTabs;
     const from = tabs.findIndex((x) => x.id === id);
     let index = d.index;

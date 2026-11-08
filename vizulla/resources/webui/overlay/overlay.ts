@@ -4,6 +4,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base } from '../shared/styles';
 import { icon } from '../shared/icons';
 import { client, on } from '../shared/bridge';
+import { installTooltips } from '../shared/tooltip';
 import { applyLocale, applyTheme } from '../shared/theme';
 import { OverlayInterface } from '@vz/common/mojom/shell';
 import { t } from '@vz/common/i18n';
@@ -78,6 +79,8 @@ export class VzOverlay extends LitElement {
       .dlg p { margin: 0 0 14px; line-height: 1.5; }
       .dlg .browser-owned { display: flex; align-items: center; gap: 6px; font-size: var(--vz-text-xs); color: var(--vz-text-3); margin-bottom: 12px; font-weight: 600; }
       .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+      .pw-head { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; } .pw-head h2 { margin: 0; }
+      .pw-key { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--vz-accent-soft); color: var(--vz-accent); animation: vz-rise 300ms var(--vz-ease); }
       .field { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
       .field > span { font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text-2); }
       .field input { height: 36px; font-size: 14px; }
@@ -99,7 +102,7 @@ export class VzOverlay extends LitElement {
       .stat span { font-size: var(--vz-text-xs); color: var(--vz-text-2); }
       .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .switch { position: relative; width: 38px; height: 22px; border-radius: 999px; background: var(--vz-surface-active); border: 0; cursor: pointer; transition: background var(--vz-dur); flex: none; }
-      .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform var(--vz-dur) var(--vz-ease); box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+      .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform var(--vz-dur) var(--vz-ease); }
       .switch[aria-checked='true'] { background: var(--vz-accent); }
       .switch[aria-checked='true']::after { transform: translateX(16px); }
       .pop .link { margin-top: 12px; display: block; font-size: var(--vz-text-s); background: none; border: 0; color: var(--vz-accent); cursor: pointer; padding: 0; }
@@ -108,6 +111,7 @@ export class VzOverlay extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    installTooltips();
     on<Surface>('Overlay', 'show', (s) => this.show(s));
     on('Overlay', 'hide', () => (this.surface = null));
     void overlay.getState().then((s: WindowState) => {
@@ -212,7 +216,10 @@ export class VzOverlay extends LitElement {
     const rows = this.rows;
     let lastSection = '';
     const anchored = s.mode === 'address' && s.anchor && !s.newTab;
-    const style = anchored ? `left:${Math.max(8, s.anchor!.x - 6)}px; top:${Math.max(6, s.anchor!.y - 9)}px; width:min(${Math.max(560, Math.round(s.anchor!.width + 12))}px, calc(100vw - ${Math.max(8, s.anchor!.x - 6) + 16}px))` : '';
+    // Anchored to the omnibox; on small windows it slides left so it always fits.
+    const cbWidth = anchored ? Math.min(Math.max(560, Math.round(s.anchor!.width + 12)), window.innerWidth - 16) : 0;
+    const cbLeft = anchored ? Math.max(8, Math.min(s.anchor!.x - 6, window.innerWidth - cbWidth - 8)) : 0;
+    const style = anchored ? `left:${cbLeft}px; top:${Math.max(6, s.anchor!.y - 9)}px; width:${cbWidth}px` : '';
     const placeholder = s.mode === 'tab-search' ? t('cb_tab_search_placeholder') : s.mode === 'ask' ? t('cb_ask_placeholder') : t('cb_placeholder_long');
     const route = this.result?.route;
     const modeLabel = s.mode === 'tab-search' ? t('cb_mode_tabs') : route === 'command' ? t('cb_mode_command') : route === 'ask' || s.mode === 'ask' ? t('cb_mode_ask') : s.newTab ? t('cb_mode_new_tab') : '';
@@ -222,7 +229,7 @@ export class VzOverlay extends LitElement {
       <div class="cb ${anchored ? 'anchored' : ''}" style=${style} role="dialog" aria-modal="true" aria-label=${t('cmd_command_bar')}>
         <div class="cb-field">
           <span class="lead">${icon(route === 'command' ? 'command' : route === 'ask' || s.mode === 'ask' ? 'sparkle' : 'search', 18)}</span>
-          <input type="text" spellcheck="false" autocomplete="off" .value=${this.input} placeholder=${placeholder}
+          <input class="bare" type="text" spellcheck="false" autocomplete="off" .value=${this.input} placeholder=${placeholder}
             role="combobox" aria-expanded="true" aria-controls="cb-rows" aria-activedescendant=${rows[this.selected] ? `cb-${this.selected}` : ''}
             @input=${(e: InputEvent) => ((this.input = (e.target as HTMLInputElement).value), void this.query())} />
           ${modeLabel ? html`<span class="mode">${modeLabel}</span>` : nothing}

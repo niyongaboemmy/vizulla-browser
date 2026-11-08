@@ -96,10 +96,44 @@ export const SEARCH_ENGINES = {
   ecosia: { name: 'Ecosia', url: 'https://www.ecosia.org/search?q=%s' },
   qwant: { name: 'Qwant', url: 'https://www.qwant.com/?q=%s' },
 } as const;
-export type SearchEngineId = keyof typeof SEARCH_ENGINES;
+export type BuiltinEngineId = keyof typeof SEARCH_ENGINES;
+/** 'custom' is the user's own engine (Settings → Search engine). */
+export type SearchEngineId = BuiltinEngineId | 'custom';
+
+export interface CustomEngine {
+  name: string;
+  /** An https URL template with one %s for the query. */
+  url: string;
+}
+
+let customEngine: CustomEngine | null = null;
+
+/** The browser process keeps this in sync with the `search.custom` pref. */
+export function setCustomEngine(e: CustomEngine | null): void {
+  customEngine = e && isValidEngineTemplate(e.url) ? e : null;
+}
+
+export function isValidEngineTemplate(url: string): boolean {
+  if (typeof url !== 'string' || url.length > 2048 || url.split('%s').length !== 2) return false;
+  try {
+    const u = new URL(url.replace('%s', 'q'));
+    return u.protocol === 'https:' && !!u.hostname && !u.username && !u.password;
+  } catch {
+    return false;
+  }
+}
+
+function engineOf(id: SearchEngineId): { name: string; url: string } {
+  if (id === 'custom') return customEngine ?? SEARCH_ENGINES.duckduckgo;
+  return SEARCH_ENGINES[id] ?? SEARCH_ENGINES.duckduckgo;
+}
+
+export function engineName(id: SearchEngineId): string {
+  return engineOf(id).name;
+}
 
 export function searchUrl(engine: SearchEngineId, text: string): string {
-  return SEARCH_ENGINES[engine].url.replace('%s', encodeURIComponent(text));
+  return engineOf(engine).url.replace('%s', encodeURIComponent(text));
 }
 
 /** vizulla://x is shown and typed; it maps to the internal pages (DD-6). */

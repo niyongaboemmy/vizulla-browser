@@ -5,6 +5,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { base } from '../shared/styles';
 import { icon } from '../shared/icons';
 import { client, on } from '../shared/bridge';
+import { installTooltips, setTooltipAvoid } from '../shared/tooltip';
 import { applyLocale, applyTheme } from '../shared/theme';
 import { ShellInterface } from '@vz/common/mojom/shell';
 import { t } from '@vz/common/i18n';
@@ -19,12 +20,18 @@ import './agent_panel';
 
 export const shell = client(ShellInterface);
 
+/** Breakpoints (window width, CSS px). */
+const NARROW = 860;
+const TINY = 600;
+
 export class VzShell extends LitElement {
-  static override properties = { state: { state: true }, findOpen: { state: true }, findResult: { state: true }, resizing: { state: true } };
+  static override properties = { state: { state: true }, findOpen: { state: true }, findResult: { state: true }, resizing: { state: true }, vw: { state: true } };
   state: WindowState | null = null;
   findOpen = false;
   findResult: { active: number; total: number } | null = null;
   resizing: 'sidebar' | 'panel' | null = null;
+  /** Window width: the layout adapts below NARROW and TINY. */
+  vw = window.innerWidth;
   private ro = new ResizeObserver(() => this.reportBounds());
   private lastBounds = '';
   private lastLocale = '';
@@ -52,7 +59,7 @@ export class VzShell extends LitElement {
         background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: 0 1px 0 var(--vz-border); animation: slide 180ms var(--vz-ease);
       }
       @keyframes slide { from { opacity: 0; transform: translateY(-6px); } }
-      .strip input { flex: 1; min-width: 0; max-width: 420px; height: 28px; border-radius: 999px; padding: 0 12px; background: var(--vz-omnibox); border-color: transparent; }
+      .strip input { flex: 1; min-width: 0; min-height: 0; max-width: 420px; height: 28px; border-radius: 999px; padding: 0 12px; background: var(--vz-omnibox); border-color: transparent; }
       .strip .count { font-size: var(--vz-text-s); color: var(--vz-text-2); min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
       .strip .grow { flex: 1; }
       .agent-bar { background: linear-gradient(90deg, color-mix(in srgb, var(--vz-accent) 16%, var(--vz-toolbar)), var(--vz-glass-strong)); }
@@ -60,12 +67,12 @@ export class VzShell extends LitElement {
       .agent-bar .step { font-variant-numeric: tabular-nums; color: var(--vz-text-2); font-weight: 600; font-size: 12px; }
       .agent-bar .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--vz-accent); animation: pulse 1.4s ease-in-out infinite; flex: none; }
       @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
-      .panel-host { display: flex; background: var(--vz-toolbar); box-shadow: -1px 0 0 var(--vz-border); }
+      .panel-host { display: flex; background: var(--vz-toolbar-bg, var(--vz-toolbar)); box-shadow: -1px 0 0 var(--vz-border); }
       .resize { width: 6px; cursor: col-resize; position: relative; z-index: 2; margin: 0 -3px; }
       .resize::after { content: ''; position: absolute; inset: 30% 3px; border-radius: 2px; background: transparent; transition: background var(--vz-dur); }
       .resize:hover::after, .resize.active::after { background: var(--vz-border-strong); }
       .bookmarks { display: flex; gap: 2px; padding: 0 8px 6px; overflow: hidden; }
-      .bookmarks button { display: inline-flex; align-items: center; gap: 6px; max-width: 180px; height: 26px; padding: 0 8px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; color: var(--vz-text-2); font-size: var(--vz-text-s); }
+      .bookmarks button { display: inline-flex; align-items: center; gap: 6px; max-width: 180px; height: 28px; padding: 0 12px 0 9px; border: 0; background: transparent; border-radius: 999px; cursor: pointer; color: var(--vz-text-2); font-size: var(--vz-text-s); }
       .bookmarks button:hover { background: var(--vz-surface-hover); color: var(--vz-text); }
       .bookmarks img { width: 14px; height: 14px; }
       .bookmarks span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -79,7 +86,13 @@ export class VzShell extends LitElement {
     on('Shell', 'find-open', () => this.openFind());
     on<{ tabId: number; active: number; total: number }>('Shell', 'found', (r) => (this.findResult = { active: r.active, total: r.total }));
     void shell.getState().then((s: WindowState) => this.apply(s));
-    window.addEventListener('resize', () => this.reportBounds());
+    installTooltips();
+    // Web pages are drawn above the page area, so tooltips must stay off it.
+    setTooltipAvoid(() => [...this.renderRoot.querySelectorAll('#content, #split')].map((el) => el.getBoundingClientRect()));
+    window.addEventListener('resize', () => {
+      this.vw = window.innerWidth;
+      this.reportBounds();
+    });
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if (this.findOpen) this.closeFind();
@@ -95,7 +108,12 @@ export class VzShell extends LitElement {
     }
     applyTheme(s.theme, s.accent, s.density);
     // macOS: a slightly translucent frame lets the window vibrancy show through (glass).
-    if (s.platform.startsWith('darwin')) document.documentElement.style.setProperty('--vz-frame-bg', 'color-mix(in srgb, var(--vz-frame) 86%, transparent)');
+    // macOS: the frame and toolbar are translucent so the window's vibrancy shows through (glass).
+    if (s.platform.startsWith('darwin') && s.theme !== 'high-contrast') {
+      const root = document.documentElement.style;
+      root.setProperty('--vz-frame-bg', 'color-mix(in srgb, var(--vz-frame) 62%, transparent)');
+      root.setProperty('--vz-toolbar-bg', 'color-mix(in srgb, var(--vz-toolbar) 80%, transparent)');
+    }
     this.state = s;
     this.setAttribute('layout', s.layout);
     this.setAttribute('sidebar', s.sidebarCollapsed ? 'collapsed' : 'open');
@@ -190,19 +208,25 @@ export class VzShell extends LitElement {
     const s = this.state;
     if (!s) return nothing;
     const vertical = s.layout === 'vertical';
-    const showSidebar = vertical && !s.sidebarCollapsed && !s.fullscreen;
+    const narrow = this.vw < NARROW;
+    const tiny = this.vw < TINY;
+    // Small windows: the sidebar narrows, then hides (tabs stay one click away in tab search).
+    const showSidebar = vertical && !s.sidebarCollapsed && !s.fullscreen && !tiny;
+    const sidebarWidth = narrow ? Math.min(s.sidebarWidth, 200) : s.sidebarWidth;
     const panel = s.panel && !s.classic;
+    // A side panel never takes more than half the window from the page.
+    const panelWidth = Math.max(260, Math.min(s.panelWidth, Math.round(this.vw * (narrow ? 0.5 : 0.45))));
     return html`
       ${vertical ? nothing : html`<vz-tabstrip .state=${s}></vz-tabstrip><vz-toolbar .state=${s} mode="full"></vz-toolbar>${s.classic ? this.renderBookmarks() : nothing}`}
       ${showSidebar
-        ? html`<div style="display:flex"><vz-sidebar .state=${s} style="width:${s.sidebarWidth}px"></vz-sidebar>
+        ? html`<div style="display:flex"><vz-sidebar .state=${s} style="width:${sidebarWidth}px"></vz-sidebar>
             <div class="resize ${this.resizing === 'sidebar' ? 'active' : ''}" role="separator" aria-orientation="vertical" aria-label=${t('a11y_resize_sidebar')}
               @pointerdown=${(e: PointerEvent) => this.startResize('sidebar', e)}></div></div>`
         : vertical
           ? html`<div></div>`
           : nothing}
       <div class="main">
-        ${vertical && (s.sidebarCollapsed || s.fullscreen) ? html`<vz-toolbar .state=${s} mode="compact"></vz-toolbar>` : nothing}
+        ${vertical && !showSidebar ? html`<vz-toolbar .state=${s} mode="compact"></vz-toolbar>` : nothing}
         ${s.agent ? this.renderAgentBar() : nothing}
         ${this.findOpen ? this.renderFind() : nothing}
         <div class="frame-wrap">
@@ -214,7 +238,7 @@ export class VzShell extends LitElement {
         ? html`<div class="panel-host">
             <div class="resize ${this.resizing === 'panel' ? 'active' : ''}" role="separator" aria-orientation="vertical" aria-label=${t('a11y_resize_panel')}
               @pointerdown=${(e: PointerEvent) => this.startResize('panel', e)}></div>
-            <vz-panels .state=${s} style="width:${s.panelWidth}px"></vz-panels></div>`
+            <vz-panels .state=${s} style="width:${panelWidth}px"></vz-panels></div>`
         : nothing}
       ${s.platform.endsWith(':private') ? html`<span class="chip private-badge">${icon('eye-off', 12)} ${t('private_window')}</span>` : nothing}
     `;

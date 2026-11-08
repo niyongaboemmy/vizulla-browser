@@ -31,6 +31,20 @@ Verification: 862 unit tests (vitest), Go tests for the Gateway and sync server,
 | 4 R2 | `ai_runtime` and `memory_index` utility processes, model manager (signed manifests, hash checks), device profile, Memory (opt-in, encrypted, hybrid recall, deletion follows history), Notes, NL commands + Ask Settings, intent chips, AI tab grouping, E2EE sync (Go server), fingerprinting protection, cookie-banner reject, rw/sw drafts | `phase4_r2.e2e.ts` |
 | 5–6 R3 | Plan validator, deterministic Policy Enforcer (322-case model-free attack suite, 100% green), isolated agent session + egress filter, CDP actuator, heuristic + LLM planners, advisory injection detector, control bar, Esc kill switch, login-page stop, Action Log, build-staleness gating, Stage B confirmations (exact destination/fields, delayed arming), PII handles, egress content matching, session grants | `policy_enforcer.test.ts`, `phase5_6_agent.e2e.ts` |
 
+## 2a. Since 0.2.1
+
+| Area | Delivered | Notes |
+|---|---|---|
+| Brand | Blue "two panes" V mark (`vizulla/app/icons/icon.svg`), `logo()` in WebUI, blue brand accent | Flat, no shadows |
+| Look | No drop shadows; glass = translucency, blur and hairline edges; translucent frame on macOS; fully rounded controls; `<vz-select>`; restyled fields, checkboxes, radios, range; entrance and press animations (reduced-motion respected) | |
+| Tabs and windows | Multi-select (Cmd/Ctrl/Shift-click) with batch menu; drag tabs between windows or out into a new one; Move to (new) window; tab search across windows; window titles follow the active tab | `BrowserApp.moveTabs`, `tab_selection.ts` |
+| Responsive | Toolbar folds at 760/600 px; tabs shrink to icons then scroll; sidebar narrows then hides; panels capped to half the window; internal pages reflow | Minimum window 400×360 |
+| Updates | GitHub Releases check (startup + every 6 h, can be turned off), toolbar button: download → SHA-256 check against `SHA256SUMS.txt` → restart and install | Builds are unsigned, so this is not Squirrel: macOS swaps the .app with a script after quit; Windows runs the NSIS installer silently; AppImage replaces itself; .deb is handed to the user |
+| Passwords | Save/update prompt after sign-in, key button (fill, generate), `vizulla://passwords` (search, edit, copy, reveal behind Touch ID, Checkup: compromised/reused/weak, import/export CSV, never-saved list) | Page side runs in an isolated world; fills only into the saved origin; the save dialog never receives the password |
+| Search | Custom search engine (https template with one %s) | |
+| Profiles | Registry + `vizulla://profiles` picker, toolbar avatar menu | Each profile runs in its own browser process with its own data folder (on macOS each open profile has its own Dock icon). In-process profiles need the services to stop assuming `app.profile`. |
+| Languages | English, French, Kiswahili, Kinyarwanda UI; websites get the chosen language (Accept-Language and navigator.language) | sw/rw are machine-drafted and need native-speaker review |
+
 ## 3. Not done or not equivalent (open work)
 
 | Item | Why / what remains |

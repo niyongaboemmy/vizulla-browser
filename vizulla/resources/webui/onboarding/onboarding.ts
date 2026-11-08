@@ -1,7 +1,8 @@
 // First run (P2-BRW-19): import → layout → AI mode → search → done. No account. Skippable.
 import { css, html, nothing } from 'lit';
 import { base, pageStyles } from '../shared/styles';
-import { icon } from '../shared/icons';
+import { icon, logo } from '../shared/icons';
+import '../shared/select';
 import { VzPage } from '../shared/page_base';
 import { applyLocale, applyTheme } from '../shared/theme';
 import { t } from '@vz/common/i18n';
@@ -24,7 +25,7 @@ class VzOnboarding extends VzPage<Data> {
     .opt b { display: block; margin-bottom: 2px; } .opt span { font-size: var(--vz-text-s); color: var(--vz-text-2); } .opt .vz-icon { color: var(--vz-accent); margin-top: 2px; }
     .nav { display: flex; align-items: center; gap: 8px; margin-top: 26px; } .dots { display: flex; gap: 6px; margin-inline-end: auto; }
     .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--vz-border-strong); transition: all var(--vz-dur); } .dots i.on { background: var(--vz-accent); width: 20px; border-radius: 4px; }
-    .hero { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; color: #fff; margin-bottom: 18px; background: linear-gradient(135deg, var(--vz-accent), color-mix(in srgb, var(--vz-accent) 40%, #22d3ee)); }
+    .hero { display: grid; margin-bottom: 18px; } .field { display: flex; flex-direction: column; gap: 8px; font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text-2); } .field vz-select { width: 100%; }
     select { height: 34px; }`];
 
   private async set(key: string, value: unknown): Promise<void> {
@@ -53,12 +54,13 @@ class VzOnboarding extends VzPage<Data> {
     const opt = (pressed: boolean, ic: string, title: string, desc: string, on: () => void) =>
       html`<button class="opt" aria-pressed=${pressed} @click=${on}>${icon(ic, 18)}<div><b>${title}</b><span>${desc}</span></div></button>`;
     return html`<div class="card" role="main">
-      ${s === 'welcome' ? html`<div class="hero">${icon('sparkle', 30)}</div><h1>${t('ob_welcome')}</h1><p class="lead">${t('ob_welcome_body')}</p>
+      ${s === 'welcome' ? html`<div class="hero">${logo(64)}</div><h1>${t('ob_welcome')}</h1><p class="lead">${t('ob_welcome_body')}</p>
         <div class="opts two">
-          <label class="field">${t('set_language')} <select @change=${(e: Event) => this.set('appearance.locale', (e.target as HTMLSelectElement).value)}>
-            <option value="auto">${t('set_language_auto')}</option>${d.locales.map((l) => html`<option value=${l.id} ?selected=${d.prefs.locale === l.id}>${l.name}</option>`)}</select></label>
-          <label class="field">${t('set_theme')} <select @change=${(e: Event) => this.set('appearance.theme', (e.target as HTMLSelectElement).value)}>
-            ${['system', 'light', 'dark'].map((x) => html`<option value=${x} ?selected=${d.prefs.theme === x}>${t(`theme_${x}` as never)}</option>`)}</select></label></div>` : nothing}
+          <div class="field">${t('set_language')} <vz-select label=${t('set_language')} .value=${d.prefs.locale} .options=${[{ id: 'auto', name: t('set_language_auto'), icon: 'globe' }, ...d.locales]}
+            @change=${(e: CustomEvent<string>) => this.set('appearance.locale', e.detail)}></vz-select></div>
+          <div class="field">${t('set_theme')} <vz-select label=${t('set_theme')} .value=${d.prefs.theme}
+            .options=${['system', 'light', 'dark'].map((x) => ({ id: x, name: t(`theme_${x}` as never), icon: x === 'system' ? 'grid' : x === 'light' ? 'sun' : 'moon' }))}
+            @change=${(e: CustomEvent<string>) => this.set('appearance.theme', e.detail)}></vz-select></div></div>` : nothing}
       ${s === 'import' ? html`<h1>${t('ob_import')}</h1><p class="lead">${t('ob_import_body')}</p><div class="opts">
         ${this.sources === null ? html`<p class="muted">${t('import_detecting')}</p>` : !this.sources.length ? html`<p class="muted">${t('import_none')}</p>` : this.sources.map((src) => opt(false, 'download', src.name, t('import_profile', { profile: src.profile }), async () => {
           const r = await this.invoke<{ bookmarks: number; history: number }>('runImport', { index: src.index, bookmarks: true, history: true });

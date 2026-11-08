@@ -12,4 +12,6 @@ export const BRANDING = {
   /** Signed filter lists (P1-CLD-03). Overridable for staging. */
   shieldsListUrl: process.env.VZ_SHIELDS_LIST_URL || null,
   protocols: ['http', 'https'],
+  /** GitHub Releases feed for in-app updates. Overridable for tests. */
+  updateFeedUrl: process.env.VZ_UPDATE_FEED || 'https://api.github.com/repos/niyongaboemmy/vizulla-browser/releases?per_page=20',
 } as const;

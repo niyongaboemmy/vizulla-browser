@@ -3,6 +3,7 @@
 import { css, html, nothing, unsafeCSS, type TemplateResult } from 'lit';
 import { base, pageStyles } from '../shared/styles';
 import { icon } from '../shared/icons';
+import '../shared/select';
 import { VzPage, switchStyles, timeAgo } from '../shared/page_base';
 import { applyLocale, applyTheme } from '../shared/theme';
 import { t, getLocale, type StringKey } from '@vz/common/i18n';
@@ -10,7 +11,7 @@ import { t, getLocale, type StringKey } from '@vz/common/i18n';
 type Prefs = Record<string, unknown>;
 interface Data {
   prefs: Prefs;
-  engines: { id: string; name: string }[];
+  engines: { id: string; name: string; hint?: string }[];
   locales: { id: string; name: string }[];
   providerKeys: Record<string, boolean>;
   permissions: { origin: string; permission: string; decision: string }[];
@@ -75,7 +76,7 @@ class VzSettings extends VzPage<Data> {
       .layout { display: grid; grid-template-columns: 220px 1fr; gap: 28px; max-width: 1080px; margin: 0 auto; padding: 32px 28px 80px; }
       nav { position: sticky; top: 24px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
       nav h1 { font-size: 22px; margin: 0 0 14px 10px; letter-spacing: -0.02em; }
-      nav button { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border: 0; background: transparent; border-radius: 8px; cursor: pointer; color: var(--vz-text-2); font-weight: 550; text-align: start; }
+      nav button { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 14px; border: 0; background: transparent; border-radius: 999px; cursor: pointer; color: var(--vz-text-2); font-weight: 550; text-align: start; }
       nav button:hover { background: var(--vz-surface-hover); color: var(--vz-text); }
       nav button[aria-current='page'] { background: var(--vz-accent-soft); color: var(--vz-accent); }
       .search { position: relative; margin-bottom: 18px; }
@@ -85,9 +86,9 @@ class VzSettings extends VzPage<Data> {
       .row { padding: 12px 18px; }
       .row + .row { border-top: 1px solid var(--vz-border); }
       select { min-width: 180px; height: 32px; }
-      .seg { display: inline-flex; background: var(--vz-surface-2); border-radius: 9px; padding: 3px; gap: 2px; }
-      .seg button { border: 0; background: transparent; padding: 5px 12px; border-radius: 7px; cursor: pointer; font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text-2); }
-      .seg button[aria-pressed='true'] { background: var(--vz-bg-elev); color: var(--vz-text); box-shadow: var(--vz-shadow); }
+      .seg { display: inline-flex; flex-wrap: wrap; background: var(--vz-surface-2); border-radius: 999px; padding: 3px; gap: 2px; }
+      .seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; transition: background var(--vz-dur), color var(--vz-dur); cursor: pointer; font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text-2); }
+      .seg button[aria-pressed='true'] { background: var(--vz-bg-elev); color: var(--vz-text); box-shadow: 0 0 0 1px var(--vz-border); }
       .key { display: flex; gap: 8px; align-items: center; }
       .key input { width: 240px; }
       .ok { color: var(--vz-ok); display: inline-flex; align-items: center; gap: 4px; font-size: var(--vz-text-s); font-weight: 600; }
@@ -102,9 +103,39 @@ class VzSettings extends VzPage<Data> {
       table { width: 100%; border-collapse: collapse; }
       td { padding: 8px 18px; border-top: 1px solid var(--vz-border); font-size: var(--vz-text-s); }
       td.pw { font-family: var(--vz-font-mono); }
+      .engine { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+      .engine input[name=name] { width: 140px; } .engine input[name=url] { width: 260px; max-width: 100%; }
+      .primary-ic { background: var(--vz-accent); color: var(--vz-on-accent); }
+      .primary-ic:hover:not([disabled]) { background: var(--vz-accent); color: var(--vz-on-accent); filter: brightness(1.08); }
       @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } nav { position: static; flex-direction: row; flex-wrap: wrap; } }
+      @media (max-width: 560px) { .layout { padding: 20px 14px 56px; gap: 16px; } .mode-cards { grid-template-columns: 1fr; } .key input, select { width: 100%; min-width: 0; } }
     `,
   ];
+
+  private engineError = '';
+
+  /** Name + URL template with %s; saved through the same validated pref path as every setting. */
+  private customEngine() {
+    const cur = this.p['search.custom'] as { name: string; url: string } | null;
+    const save = async (form: HTMLFormElement) => {
+      const f = new FormData(form);
+      const value = { name: String(f.get('name') ?? '').trim(), url: String(f.get('url') ?? '').trim() };
+      try {
+        await this.set('search.custom', value);
+        await this.set('search.engine', 'custom');
+        this.engineError = '';
+      } catch {
+        this.engineError = t('set_custom_engine_invalid');
+      }
+      this.requestUpdate();
+    };
+    return html`<form class="engine" @submit=${(e: SubmitEvent) => (e.preventDefault(), void save(e.target as HTMLFormElement))}>
+      <input type="text" name="name" required maxlength="40" placeholder=${t('set_custom_engine_name')} aria-label=${t('set_custom_engine_name')} .value=${cur?.name ?? ''} />
+      <input type="url" name="url" required placeholder="https://example.com/search?q=%s" aria-label=${t('set_custom_engine_url')} .value=${cur?.url ?? ''} />
+      <button class="icon-btn primary-ic" type="submit" title=${t('action_save')} aria-label=${t('action_save')}>${icon('check', 16)}</button>
+      ${cur ? html`<button class="icon-btn" type="button" title=${t('action_remove')} aria-label=${t('action_remove')} @click=${() => void this.set('search.custom', null)}>${icon('trash', 15)}</button>` : nothing}
+    </form>`;
+  }
 
   private async set(key: string, value: unknown): Promise<void> {
     this.data = { ...this.data!, ...(await this.invoke<Data>('set', { key, value })) };
@@ -136,8 +167,7 @@ class VzSettings extends VzPage<Data> {
   }
 
   private select(key: string, options: { id: string; name: string }[]) {
-    return html`<select aria-label=${key} @change=${(e: Event) => void this.set(key, (e.target as HTMLSelectElement).value)}>
-      ${options.map((o) => html`<option value=${o.id} ?selected=${this.p[key] === o.id}>${o.name}</option>`)}</select>`;
+    return html`<vz-select label=${key} .value=${String(this.p[key] ?? '')} .options=${options} @change=${(e: CustomEvent<string>) => void this.set(key, e.detail)}></vz-select>`;
   }
 
   private seg(key: string, options: { id: string; name: string }[]) {
@@ -156,12 +186,16 @@ class VzSettings extends VzPage<Data> {
     const d = this.data!;
     const L = (k: StringKey) => t(k);
     const rows: Row[] = [
-      { section: 'general', label: L('set_search_engine'), desc: L('set_search_engine_desc'), control: () => this.select('search.engine', d.engines), keywords: 'google duckduckgo bing' },
+      { section: 'general', label: L('set_search_engine'), desc: L('set_search_engine_desc'), control: () => this.select('search.engine', d.engines.map((e) => ({ ...e, icon: 'search' }))), keywords: 'google duckduckgo bing' },
+      { section: 'general', label: L('set_custom_engine'), desc: this.engineError || L('set_custom_engine_desc'), keywords: 'search engine custom own site',
+        control: () => this.customEngine() },
       { section: 'general', label: L('set_language'), control: () => this.select('appearance.locale', [{ id: 'auto', name: L('set_language_auto') }, ...d.locales, { id: 'pseudo', name: 'Pseudo-locale (test)' }]), keywords: 'locale french kinyarwanda swahili' },
       { section: 'general', label: L('set_restore'), desc: L('set_restore_desc'), control: () => this.sw('tabs.restoreOnStartup'), keywords: 'startup session' },
       { section: 'general', label: L('set_default_browser'), desc: d.isDefaultBrowser ? L('set_default_yes') : L('set_default_no'),
         control: () => (d.isDefaultBrowser ? html`<span class="ok">${icon('check', 14)} ${L('set_default_yes_short')}</span>` : html`<button class="btn" @click=${async () => ((d.isDefaultBrowser = await this.invoke<boolean>('setDefaultBrowser')), this.requestUpdate())}>${L('set_make_default')}</button>`) },
       { section: 'general', label: L('set_downloads_ask'), control: () => this.sw('downloads.askWhere') },
+      { section: 'general', label: L('settings_updates_auto'), desc: L('settings_updates_auto_desc'), keywords: 'update upgrade version release',
+        control: () => html`<button class="icon-btn" title=${L('cmd_check_updates')} aria-label=${L('cmd_check_updates')} @click=${() => this.invoke('command', { id: 'app.checkUpdates' })}>${icon('refresh', 15)}</button>${this.sw('updates.autoCheck')}` },
       { section: 'appearance', label: L('set_theme'), control: () => this.seg('appearance.theme', [{ id: 'system', name: L('theme_system') }, { id: 'light', name: L('theme_light') }, { id: 'dark', name: L('theme_dark') }, { id: 'high-contrast', name: L('theme_high_contrast') }]), keywords: 'dark light mode contrast' },
       { section: 'appearance', label: L('set_accent'), desc: L('set_accent_desc'), control: () => this.select('appearance.accent', ['indigo', 'teal', 'amber', 'rose', 'violet', 'emerald', 'sky', 'slate'].map((c) => ({ id: c, name: c[0]!.toUpperCase() + c.slice(1) }))), keywords: 'color' },
       { section: 'appearance', label: L('set_density'), control: () => this.seg('appearance.density', [{ id: 'comfortable', name: L('density_comfortable') }, { id: 'compact', name: L('density_compact') }]) },
@@ -226,7 +260,7 @@ class VzSettings extends VzPage<Data> {
         ${q ? html`<h2 class="sec-title">${t('set_results', { count: visible.length })}</h2>` : html`<h2 class="sec-title">${t(SECTIONS.find((s) => s.id === this.section)?.title as StringKey)}</h2>`}
         ${!q && this.section === 'ai' ? this.renderAi() : nothing}
         ${!q && this.section === 'sync' ? this.renderSync() : nothing}
-        ${visible.length ? html`<div class="card">${visible.map((r) => html`<div class="row"><div class="grow"><div class="title">${r.label}</div>${r.desc ? html`<div class="desc">${r.desc}</div>` : nothing}</div>${r.control()}</div>`)}</div>` : nothing}
+        ${visible.length ? html`<div class="card rise">${visible.map((r) => html`<div class="row"><div class="grow"><div class="title">${r.label}</div>${r.desc ? html`<div class="desc">${r.desc}</div>` : nothing}</div>${r.control()}</div>`)}</div>` : nothing}
         ${!q && this.section === 'agent' && this.data!.features.VizullaAgentStageB ? this.renderAgentProfile() : nothing}
         ${!q && this.section === 'passwords' ? this.renderPasswords() : nothing}
         ${!q && this.section === 'import' ? this.renderImport() : nothing}

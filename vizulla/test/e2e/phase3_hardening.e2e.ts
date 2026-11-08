@@ -12,6 +12,8 @@ const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 async function axe(page: Page): Promise<{ id: string; impact: string; nodes: string[] }[]> {
   await page.evaluate(AXE);
   const r = await page.evaluate(async () => {
+    // Entrance animations fade in; measure contrast once they've settled.
+    await Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => undefined)));
     const res = await (window as any).axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } });
     return res.violations.map((v: any) => ({ id: v.id, impact: v.impact, nodes: v.nodes.slice(0, 3).map((n: any) => `${n.target.join(' ')} :: ${n.failureSummary}`) }));
   });
@@ -33,7 +35,7 @@ test('accessibility: shell, overlay, and internal pages have no WCAG AA violatio
   await inMain(h, (vz) => vz.focused().setPanel('notes'));
   await chrome.waitForTimeout(300);
   results.notesPanel = await axe(chrome);
-  for (const url of ['vizulla://settings', 'vizulla://privacy', 'vizulla://history', 'vizulla://newtab', 'vizulla://archive', 'vizulla://downloads', 'vizulla://about', 'vizulla://flags', 'vizulla://onboarding', 'vizulla://memory']) {
+  for (const url of ['vizulla://settings', 'vizulla://privacy', 'vizulla://history', 'vizulla://newtab', 'vizulla://archive', 'vizulla://downloads', 'vizulla://about', 'vizulla://flags', 'vizulla://onboarding', 'vizulla://memory', 'vizulla://passwords', 'vizulla://profiles']) {
     await inMain(h, (vz, u) => vz.focused().loadUrl(null, u, { newTab: true }), url);
     const p = await page(h, url);
     await p.waitForLoadState('load');

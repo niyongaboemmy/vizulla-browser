@@ -24,7 +24,13 @@ export const ShellInterface = defineInterface('Shell', {
   setMuted: [tabId, v.bool()],
   moveTab: [tabId, v.int({ min: 0, max: 100000 }), v.optional(v.string({ max: 64 }))],
   moveTabToSpace: [tabId, v.id()],
-  showTabMenu: [tabId, v.optional(point)],
+  showTabMenu: [tabId, v.optional(point), v.optional(v.array(tabId, { max: 500 }))],
+  showPasswordMenu: [tabId, v.optional(point)],
+  showProfileMenu: [v.optional(point)],
+  /** Tabs dragged out of the strip: open them in a new window at the screen point. */
+  detachTabs: [v.array(tabId, { max: 500 }), v.optional(point)],
+  /** Tabs dragged in from another window's strip: insert at this visible index. */
+  adoptTabs: [v.array(tabId, { max: 500 }), v.int({ min: 0, max: 100000 })],
   showSpaceMenu: [v.id(), v.optional(point)],
   showAppMenu: [v.optional(point)],
   switchSpace: [v.id()],

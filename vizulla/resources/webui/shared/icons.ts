@@ -5,6 +5,7 @@ const P: Record<string, string> = {
   'arrow-left': 'M19 12H5M12 19l-7-7 7-7',
   'arrow-right': 'M5 12h14M12 5l7 7-7 7',
   refresh: 'M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5',
+  update: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16V8M8.5 11.5 12 8l3.5 3.5',
   x: 'M18 6 6 18M6 6l12 12',
   plus: 'M12 5v14M5 12h14',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
@@ -23,6 +24,7 @@ const P: Record<string, string> = {
   volume: 'M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
   'volume-x': 'M4 9v6h4l5 4V5L8 9H4zM17 9l5 5M22 9l-5 5',
   moon: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   archive: 'M3 5h18v4H3zM5 9v10h14V9M10 13h4',
   settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
   brain: 'M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V5a2 2 0 0 0-3-1zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1',
@@ -58,6 +60,8 @@ const P: Record<string, string> = {
   cpu: 'M7 7h10v10H7zM10 10h4v4h-4zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4',
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   'eye-off': 'M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  edit: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
+  upload: 'M12 15V3M7 8l5-5 5 5M5 21h14',
   key: 'M15 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM11.5 12.5 4 20M7 17l2 2M5 19l2 2',
   folder: 'M3 6h6l2 2h10v11H3z',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
@@ -84,3 +88,15 @@ export function icon(name: string, size = 16, label?: string): TemplateResult {
 }
 
 export const ICON_NAMES = Object.keys(P);
+
+/** The Vizulla mark (same geometry as app/icons/icon.svg, cropped to the tile). */
+export function logo(size = 28, label?: string): TemplateResult {
+  return html`<svg class="vz-logo" width=${size} height=${size} viewBox="100 100 824 824" role=${label ? 'img' : 'presentation'}
+    aria-hidden=${label ? 'false' : 'true'} aria-label=${label ?? ''}>
+    <defs><linearGradient id="vz-logo-tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"></stop><stop offset="1" stop-color="#1d4ed8"></stop></linearGradient></defs>
+    <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#vz-logo-tile)"></rect>
+    <g stroke-linecap="round" stroke-width="136" fill="none">
+      <line x1="650" y1="312" x2="512" y2="712" stroke="#fff" stroke-opacity="0.55"></line>
+      <line x1="374" y1="312" x2="512" y2="712" stroke="#fff"></line>
+    </g></svg>`;
+}

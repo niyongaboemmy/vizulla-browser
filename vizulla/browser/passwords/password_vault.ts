@@ -2,7 +2,7 @@
 // held by the OS keychain (doc 05 §5). Secrets never cross IPC to renderers except
 // the one value the user explicitly reveals or fills (C8).
 // Breach check (P1-SEC-02): k-anonymity: only the first 5 hex chars of SHA-1 leave the device.
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { Database } from '../storage/database';
 import { CryptoBox, type KeyProvider } from '../storage/crypto_box';
 
@@ -58,11 +58,46 @@ export class PasswordVault {
   }
 
   /** The only way a password leaves the vault: an explicit reveal, copy, or fill. */
-  reveal(id: number): { origin: string; username: string; password: string } | null {
+  reveal(id: number): { origin: string; username: string; password: string; note: string } | null {
     const r = this.db.get<Record<string, unknown>>('SELECT * FROM logins WHERE id = ?', id);
     if (!r) return null;
     const origin = String(r.origin);
-    return { origin, username: this.box.openString(String(r.username_enc), origin), password: this.box.openString(String(r.password_enc), origin) };
+    return {
+      origin,
+      username: this.box.openString(String(r.username_enc), origin),
+      password: this.box.openString(String(r.password_enc), origin),
+      note: this.box.openString(String(r.note_enc), origin),
+    };
+  }
+
+  update(id: number, patch: { username?: string; password?: string; note?: string }): boolean {
+    const cur = this.reveal(id);
+    if (!cur) return false;
+    const next = { ...cur, ...patch };
+    this.db.run(
+      'UPDATE logins SET username_enc = ?, password_enc = ?, note_enc = ?, updated_at = ?, breached = CASE WHEN ? THEN NULL ELSE breached END WHERE id = ?',
+      this.box.sealString(next.username, cur.origin), this.box.sealString(next.password, cur.origin), this.box.sealString(next.note, cur.origin),
+      this.now(), next.password !== cur.password ? 1 : 0, id,
+    );
+    return true;
+  }
+
+  /** Weak and reused flags per login, computed here so passwords never leave the process. */
+  health(): Map<number, { weak: boolean; reused: boolean }> {
+    const secrets = this.list().map((l) => ({ id: l.id, pw: this.reveal(l.id)?.password ?? '' }));
+    const counts = new Map<string, number>();
+    for (const s of secrets) counts.set(s.pw, (counts.get(s.pw) ?? 0) + 1);
+    return new Map(secrets.map((s) => [s.id, { weak: isWeak(s.pw), reused: (counts.get(s.pw) ?? 0) > 1 }]));
+  }
+
+  /** Chrome-compatible CSV (name,url,username,password,note). Only after the user confirms. */
+  exportCsv(): string {
+    const q = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const rows = this.list().map((l) => {
+      const s = this.reveal(l.id)!;
+      return [new URL(s.origin).hostname, s.origin, s.username, s.password, s.note].map(q).join(',');
+    });
+    return ['name,url,username,password,note', ...rows].join('\n') + '\n';
   }
 
   remove(id: number): void {
@@ -90,6 +125,30 @@ export class PasswordVault {
   close(): void {
     this.db.close();
   }
+}
+
+const COMMON = new Set(['password', '123456', '12345678', '123456789', 'qwerty', 'azerty', 'abc123', 'letmein', 'welcome', 'admin', 'iloveyou', 'password1', '111111', '000000', 'monkey', 'dragon']);
+
+/** A password is weak when short, very common, or built from one kind of character. */
+export function isWeak(pw: string): boolean {
+  if (pw.length < 8 || COMMON.has(pw.toLowerCase())) return true;
+  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(pw)).length;
+  if (pw.length >= 16) return classes < 1;
+  return classes < (pw.length >= 12 ? 2 : 3);
+}
+
+const GEN_SETS = ['abcdefghijkmnopqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '-_.!@#'];
+
+/** A strong random password with every character class, no look-alike characters (l/1, O/0). */
+export function generatePassword(length = 18): string {
+  const all = GEN_SETS.join('');
+  const out = GEN_SETS.map((set) => set[randomInt(set.length)]!);
+  while (out.length < length) out.push(all[randomInt(all.length)]!);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out.join('');
 }
 
 export async function isBreached(password: string, rangeFetch: (prefix: string) => Promise<string>, cache = new Map<string, string>()): Promise<boolean> {

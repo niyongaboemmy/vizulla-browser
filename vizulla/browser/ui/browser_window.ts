@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import type { BrowserApp } from '../browser_app';
 import type { Profile } from '../profile';
 import { TabStripModel } from '../tabs/tab_strip_model';
-import { logicalUrl, WebTab } from '../tabs/web_tab';
+import { logicalUrl, WebTab, type WebTabOptions } from '../tabs/web_tab';
 import type { NavState, SessionWindow } from '../spaces/spaces_service';
 import { OverlayController } from './overlay';
 import { emitTo } from './ipc_router';
@@ -41,6 +41,12 @@ export interface CreateTabOptions {
   session?: Electron.Session;
 }
 
+/** A window opened from tabs dragged out of another window. */
+export interface WindowInit {
+  bounds?: Rect;
+  adopt?: { tab: WebTab; pinned: boolean }[];
+}
+
 interface ClosedTab {
   spaceId: string;
   url: string;
@@ -69,15 +75,15 @@ export class BrowserWindowController extends EventEmitter {
   private destroyed = false;
   private chromeReady = false;
 
-  constructor(readonly app: BrowserApp, readonly profile: Profile, restore: SessionWindow | null) {
+  constructor(readonly app: BrowserApp, readonly profile: Profile, restore: SessionWindow | null, init: WindowInit = {}) {
     super();
     this.key = restore?.key ?? randomUUID();
     const prefs = profile.prefs;
-    const bounds = restore?.bounds ?? defaultBounds();
+    const bounds = init.bounds ?? restore?.bounds ?? defaultBounds();
     this.win = new BaseWindow({
       ...bounds,
-      minWidth: 640,
-      minHeight: 420,
+      minWidth: 400,
+      minHeight: 360,
       show: false,
       title: profile.isPrivate ? 'Vizulla — Private' : 'Vizulla',
       backgroundColor: windowBackground(this.resolvedTheme()),
@@ -147,6 +153,7 @@ export class BrowserWindowController extends EventEmitter {
       this.model.switchSpace(activeSpace);
       this.activeTab()?.ensureLive();
     }
+    for (const a of init.adopt ?? []) this.adoptTab(a.tab, { pinned: a.pinned });
     if (!this.model.visible().length) this.createTab({ url: 'vizulla://newtab/', activate: true });
 
     this.win.show();
@@ -172,15 +179,8 @@ export class BrowserWindowController extends EventEmitter {
       preload: this.app.preloadPath,
       agent: o.agent,
       adoptView: o.adoptView,
-      onOpen: ({ url, disposition, options }) => {
-        const view = new WebContentsView({ webContents: (options as { webContents?: WebContents }).webContents, webPreferences: options.webPreferences } as Electron.WebContentsViewConstructorOptions);
-        const child = this.createTab({
-          adoptView: view, url, spaceId: this.model.get(tab.id)?.spaceId, afterId: tab.id, openerId: tab.id,
-          activate: disposition !== 'background-tab', agent: tab.agent, session: tab.session,
-        });
-        return child.wc;
-      },
     });
+    tab.setOpener(this.openerFor(tab));
     this.tabs.set(tab.id, tab);
     this.wireTab(tab);
     this.model.add(
@@ -190,28 +190,69 @@ export class BrowserWindowController extends EventEmitter {
     return tab;
   }
 
+  private openerFor(tab: WebTab): WebTabOptions['onOpen'] {
+    return ({ url, disposition, options }) => {
+      const view = new WebContentsView({ webContents: (options as { webContents?: WebContents }).webContents, webPreferences: options.webPreferences } as Electron.WebContentsViewConstructorOptions);
+      const child = this.createTab({
+        adoptView: view, url, spaceId: this.model.get(tab.id)?.spaceId, afterId: tab.id, openerId: tab.id,
+        activate: disposition !== 'background-tab', agent: tab.agent, session: tab.session,
+      });
+      return child.wc;
+    };
+  }
+
+  /** Hands a live tab to another window: the page keeps running, nothing is closed or recorded. */
+  releaseTab(id: number): { tab: WebTab; pinned: boolean } | null {
+    const tab = this.tabs.get(id);
+    const meta = this.model.get(id);
+    if (!tab || !meta || tab.agent) return null;
+    if (this.splitTabId === id) this.splitTabId = null;
+    this.detachView(tab.view);
+    this.unwire.get(id)?.();
+    this.unwire.delete(id);
+    this.tabs.delete(id);
+    this.model.remove(id);
+    return { tab, pinned: meta.pinned };
+  }
+
+  /** Takes a tab released by another window into the active Space. */
+  adoptTab(tab: WebTab, o: { pinned?: boolean; index?: number; activate?: boolean } = {}): void {
+    this.tabs.set(tab.id, tab);
+    tab.setOpener(this.openerFor(tab));
+    this.wireTab(tab);
+    this.model.add({ id: tab.id, spaceId: this.model.activeSpaceId, openerId: null, pinned: o.pinned ?? false }, { index: o.index, activate: o.activate ?? true });
+  }
+
+  private readonly unwire = new Map<number, () => void>();
+
   private wireTab(tab: WebTab): void {
     const profile = this.profile;
-    tab.on('updated', () => this.pushState());
-    tab.on('main-frame-navigation-start', () => {
+    const offs: (() => void)[] = [];
+    const on = (event: string, fn: (...args: any[]) => void): void => {
+      tab.on(event, fn);
+      offs.push(() => tab.off(event, fn));
+    };
+    this.unwire.set(tab.id, () => offs.forEach((off) => off()));
+    on('updated', () => this.pushState());
+    on('main-frame-navigation-start', () => {
       if (tab.wc) profile.shields.resetCounts(tab.wc.id);
     });
-    tab.on('navigated', (url: string) => {
+    on('navigated', (url: string) => {
       if (!profile.isPrivate && !tab.agent) profile.history.addVisit(url, tab.title, { typed: this.pendingTyped.delete(tab.id) });
       this.emit('tab-navigated', tab);
       this.scheduleSave();
     });
-    tab.on('title', (title: string) => {
+    on('title', (title: string) => {
       if (!profile.isPrivate && !tab.agent) profile.history.updateTitle(tab.url, title);
       this.scheduleSave();
     });
-    tab.on('favicon', (fav: string) => !profile.isPrivate && profile.history.updateFavicon(tab.url, fav));
-    tab.on('dom-ready', () => {
+    on('favicon', (fav: string) => !profile.isPrivate && profile.history.updateFavicon(tab.url, fav));
+    on('dom-ready', () => {
       if (tab.wc) void profile.shields.applyCosmetic(tab.wc);
       this.emit('tab-dom-ready', tab);
     });
-    tab.on('did-finish-load', () => this.emit('tab-loaded', tab));
-    tab.on('load-failed', ({ code, desc, url }: { code: number; desc: string; url: string }) => {
+    on('did-finish-load', () => this.emit('tab-loaded', tab));
+    on('load-failed', ({ code, desc, url }: { code: number; desc: string; url: string }) => {
       const wc = tab.wc;
       if (!wc) return;
       if (profile.shields.handleUpgradeFailure(wc, url)) return;
@@ -219,20 +260,20 @@ export class BrowserWindowController extends EventEmitter {
       const q = new URLSearchParams({ code: String(code), desc, url });
       void wc.loadURL(`vizulla://error/?${q.toString()}`).catch(() => undefined);
     });
-    tab.on('context-menu', (params: Electron.ContextMenuParams) => {
+    on('context-menu', (params: Electron.ContextMenuParams) => {
       const menu = buildPageContextMenu(this, tab, params);
       menu.popup({ window: this.win as unknown as Electron.BrowserWindow });
     });
-    tab.on('input', (e: Electron.Event, input: Electron.Input) => this.app.handleTabInput(this, tab, e, input));
-    tab.on('html-fullscreen', (on: boolean) => {
+    on('input', (e: Electron.Event, input: Electron.Input) => this.app.handleTabInput(this, tab, e, input));
+    on('html-fullscreen', (on: boolean) => {
       this.htmlFullscreen = on;
       this.win.setFullScreen(on);
       this.layoutTabs();
       this.pushState();
     });
-    tab.on('closed-by-page', () => this.closeTab(tab.id, { fromPage: true }));
-    tab.on('found', (r: Electron.Result) => emitTo(this.chrome.webContents, 'Shell', 'found', { tabId: tab.id, active: r.activeMatchOrdinal, total: r.matches }));
-    tab.on('zoom-key', (dir: 'in' | 'out') => this.zoom(tab.id, dir));
+    on('closed-by-page', () => this.closeTab(tab.id, { fromPage: true }));
+    on('found', (r: Electron.Result) => emitTo(this.chrome.webContents, 'Shell', 'found', { tabId: tab.id, active: r.activeMatchOrdinal, total: r.matches }));
+    on('zoom-key', (dir: 'in' | 'out') => this.zoom(tab.id, dir));
   }
 
   private readonly pendingTyped = new Set<number>();
@@ -248,6 +289,7 @@ export class BrowserWindowController extends EventEmitter {
     if (this.splitTabId === id) this.splitTabId = null;
     this.detachView(tab.view);
     this.tabs.delete(id);
+    this.unwire.delete(id);
     this.emit('tab-closed', tab);
     if (!opts.fromPage) tab.destroy();
     this.model.remove(id);
@@ -576,6 +618,7 @@ export class BrowserWindowController extends EventEmitter {
       pinned: m.pinned,
       lastActive: m.lastActive,
       blocked: tab.wc ? this.profile.shields.blockedCount(tab.wc.id) : 0,
+      passwords: this.profile.isPrivate ? { logins: 0, form: false } : this.app.passwords.status(tab),
       ...i,
       url: logicalUrl(tab.url),
       displayUrl: shown,
@@ -612,6 +655,8 @@ export class BrowserWindowController extends EventEmitter {
       density: prefs.get('appearance.density'),
       aiMode: prefs.get('ai.mode'),
       features: this.profile.features.snapshot(),
+      update: this.app.updates.info(),
+      profile: { ...pick(this.app.profiles.current()), count: this.app.profiles.list().length },
       fullscreen: this.win.isFullScreen() || this.htmlFullscreen,
       bookmarks: prefs.get('tabs.classic') ? this.profile.history.bookmarks().slice(0, 30).map((b) => ({ url: b.url, title: b.title })) : [],
     };
@@ -622,18 +667,24 @@ export class BrowserWindowController extends EventEmitter {
     if (immediate) {
       if (this.stateTimer) clearTimeout(this.stateTimer);
       this.stateTimer = null;
-      emitTo(this.chrome.webContents, 'Shell', 'state', this.state());
-      this.emit('state');
+      this.sendState();
       return;
     }
     if (this.stateTimer) return;
     this.stateTimer = setTimeout(() => {
       this.stateTimer = null;
-      if (!this.destroyed) {
-        emitTo(this.chrome.webContents, 'Shell', 'state', this.state());
-        this.emit('state');
-      }
+      if (!this.destroyed) this.sendState();
     }, 16);
+  }
+
+  private sendState(): void {
+    emitTo(this.chrome.webContents, 'Shell', 'state', this.state());
+    // The OS window title follows the active tab (Window menu, Mission Control, taskbar).
+    const title = this.activeTab()?.title;
+    const many = this.app.profiles.list().length > 1;
+    const name = this.profile.isPrivate ? 'Vizulla — Private' : many ? `Vizulla — ${this.app.profiles.current().name}` : 'Vizulla';
+    this.win.setTitle(title ? `${title} — ${name}` : name);
+    this.emit('state');
   }
 
   sessionSnapshot(): SessionWindow {
@@ -725,3 +776,5 @@ function defaultBounds() {
 }
 
 export const WEBUI_PRELOAD = (outDir: string) => join(outDir, 'preload', 'webui_preload.js');
+
+const pick = (p: { id: string; name: string; color: string }) => ({ id: p.id, name: p.name, color: p.color });

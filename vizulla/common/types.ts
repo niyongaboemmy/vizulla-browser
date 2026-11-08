@@ -34,6 +34,8 @@ export interface TabInfo {
   canGoBack: boolean;
   canGoForward: boolean;
   blocked: number;
+  /** Toolbar key button: saved logins for this origin, and whether the page has a password field. */
+  passwords: { logins: number; form: boolean };
   lastActive: number;
   isPdf: boolean;
   /** Set for tabs driven by the agent (Stage A: isolated session). */
@@ -100,6 +102,19 @@ export interface WindowState {
   fullscreen: boolean;
   /** Classic mode only: the bookmarks bar (first folder level). */
   bookmarks: { url: string; title: string }[];
+  /** This window's profile (toolbar avatar). `count` is how many profiles exist. */
+  profile: { id: string; name: string; color: string; count: number };
+  /** Shown as the toolbar update button when a newer release exists. */
+  update: UpdateInfo | null;
+}
+
+export interface UpdateInfo {
+  status: 'available' | 'downloading' | 'ready' | 'installing' | 'error';
+  version: string;
+  /** 0–100 while downloading. */
+  percent: number;
+  notesUrl: string;
+  error?: string;
 }
 
 export type ThemePref = 'system' | 'light' | 'dark' | 'high-contrast';

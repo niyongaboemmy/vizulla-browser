@@ -4,6 +4,7 @@ import { LitElement, html } from 'lit';
 import { page } from './bridge';
 import { applyLocale, applyTheme } from './theme';
 import { icon } from './icons';
+import { installTooltips } from './tooltip';
 
 export abstract class VzPage<T> extends LitElement {
   static override properties = { data: { state: true }, error: { state: true } };
@@ -12,6 +13,7 @@ export abstract class VzPage<T> extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    installTooltips();
     void page
       .init<T>()
       .then((r) => {
@@ -40,7 +42,7 @@ export abstract class VzPage<T> extends LitElement {
 
 export const switchStyles = `
   .switch { position: relative; width: 38px; height: 22px; border-radius: 999px; background: var(--vz-surface-active); border: 0; cursor: pointer; transition: background var(--vz-dur); flex: none; }
-  .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform var(--vz-dur) var(--vz-ease); box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform var(--vz-dur) var(--vz-ease); }
   .switch[aria-checked='true'] { background: var(--vz-accent); }
   .switch[aria-checked='true']::after { transform: translateX(16px); }
 `;

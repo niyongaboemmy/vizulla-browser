@@ -1,17 +1,18 @@
 // Handlers behind vizulla:// pages (the PageHandler half of each WebUI page).
 // Each host has its own method table; payloads are validated per method.
-import { app, dialog, shell, systemPreferences } from 'electron';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { app, clipboard, dialog, shell, systemPreferences } from 'electron';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BrowserApp, PageMethod } from '../browser_app';
 import { v } from '@vz/common/mojom/schema';
 import { emitTo } from './ipc_router';
 import { WRITABLE_PREFS, type PrefKey } from '../prefs/prefs_schema';
-import { SEARCH_ENGINES } from '@vz/common/url';
+import { engineName, SEARCH_ENGINES } from '@vz/common/url';
 import { LOCALES, t } from '@vz/common/i18n';
 import { ALL_FEATURES } from '../vizulla_features';
 import { detectSources, importFrom, parsePasswordCsv, type ImportSource } from '../importers/importers';
-import { PasswordVault } from '../passwords/password_vault';
+import { generatePassword, type PasswordVault } from '../passwords/password_vault';
+import { PROFILE_COLORS } from '../profiles/profile_registry';
 import { BRANDING } from '@vz/app/branding';
 
 const SHELL_HOSTS = new Set(['chrome', 'overlay']);
@@ -25,10 +26,26 @@ export class InternalPages {
     const dir = join(app.outDir, 'webui');
     this.hosts = existsSync(dir) ? readdirSync(dir).filter((d) => !SHELL_HOSTS.has(d) && statSync(join(dir, d)).isDirectory()) : [];
     const p = app.profile;
-    this.vault = p.register('vault', new PasswordVault(join(p.dir, 'Vault.db'), p.keys), () => this.vault?.close());
+    this.vault = app.passwords.vault;
     this.registerAll();
     p.downloads.on('changed', () => this.notify('downloads', 'changed', p.downloads.list()));
     p.downloads.on('started', () => this.notify('downloads', 'changed', p.downloads.list()));
+  }
+
+  private authorizedUntil = 0;
+
+  /** Asks the OS to confirm it's the user (Touch ID on macOS) before a secret leaves the vault. One minute of grace, like other browsers. */
+  private async authorize(reason: string): Promise<boolean> {
+    if (Date.now() < this.authorizedUntil) return true;
+    if (process.platform === 'darwin' && systemPreferences.canPromptTouchID()) {
+      try {
+        await systemPreferences.promptTouchID(reason);
+      } catch {
+        return false;
+      }
+    }
+    this.authorizedUntil = Date.now() + 60_000;
+    return true;
   }
 
   /** Sends an event to every open tab showing vizulla://<host>. */
@@ -68,12 +85,132 @@ export class InternalPages {
         const pins = w ? w.model.visible(spaceId).filter((m) => m.pinned).map((m) => w.tabInfo(m.id)) : [];
         const recent = p.history.recent(8).map((h) => ({ url: h.url, title: h.title, favicon: h.favicon }));
         const archived = p.spaces.listArchive(spaceId, 4).map((x) => ({ id: x.id, url: x.url, title: x.title, favicon: x.favicon }));
-        return { space, pins, recent, archived, engine: SEARCH_ENGINES[p.prefs.get('search.engine')].name, onboarded: p.prefs.get('onboarding.completed'), aiMode: p.prefs.get('ai.mode') };
+        return { space, pins, recent, archived, engine: engineName(p.prefs.get('search.engine')), onboarded: p.prefs.get('onboarding.completed'), aiMode: p.prefs.get('ai.mode') };
       },
       open,
       command,
       openCommandBar: (_x, ctx) => ctx.window && a.openCommandBar(ctx.window, 'address'),
       restoreArchived: (payload, ctx) => ctx.window?.restoreArchived(v.int().parse(payload, 'id')),
+    });
+
+    // ---- Password Manager (ID-01): list, edit, checkup, import/export.
+    const vault = this.vault!;
+    const pwData = () => {
+      const health = vault.health();
+      return {
+        logins: vault.list().map((l) => ({ ...l, ...(health.get(l.id) ?? { weak: false, reused: false }) })),
+        offerToSave: p.prefs.get('passwords.offerToSave'),
+        neverSave: p.prefs.get('passwords.neverSave'),
+        biometric: process.platform === 'darwin' && systemPreferences.canPromptTouchID(),
+      };
+    };
+    const changed = () => this.notify('passwords', 'changed');
+    const id = (x: unknown) => v.int({ min: 0 }).parse(x, 'id');
+    this.define('passwords', {
+      init: () => pwData(),
+      reveal: async (x) => ((await this.authorize(t('reveal_password_reason'))) ? vault.reveal(id(x)) : null),
+      copy: async (x) => {
+        const { id: lid, field } = v.object({ id: v.int({ min: 0 }), field: v.literal('username', 'password') }).parse(x, 'copy');
+        const s = vault.reveal(lid);
+        if (!s || (field === 'password' && !(await this.authorize(t('reveal_password_reason'))))) return false;
+        clipboard.writeText(field === 'password' ? s.password : s.username);
+        // Clear a copied password from the clipboard after a minute (if it's still there).
+        if (field === 'password') {
+          setTimeout(async () => {
+            if ((await clipboard.readText()) === s.password) clipboard.clear();
+          }, 60_000);
+        }
+        return true;
+      },
+      update: (x) => {
+        const { id: lid, username, password, note } = v.object({ id: v.int({ min: 0 }), username: v.optional(v.string({ max: 256 })), password: v.optional(v.string({ min: 1, max: 1024 })), note: v.optional(v.string({ max: 2000 })) }).parse(x, 'update');
+        vault.update(lid, { username, password, note });
+        changed();
+        return pwData();
+      },
+      add: (x) => {
+        const { site, username, password, note } = v.object({ site: v.string({ max: 2048 }), username: v.string({ max: 256 }), password: v.string({ min: 1, max: 1024 }), note: v.optional(v.string({ max: 2000 })) }).parse(x, 'add');
+        const u = new URL(/^https?:\/\//.test(site) ? site : `https://${site}`);
+        if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.')) throw new Error('bad site');
+        vault.add(u.origin, username, password, note ?? '');
+        changed();
+        return pwData();
+      },
+      remove: (x) => {
+        vault.remove(id(x));
+        changed();
+        return pwData();
+      },
+      generate: () => generatePassword(),
+      checkBreaches: async () => {
+        const n = await vault.checkBreaches(async (prefix) => {
+          const r = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, { headers: { 'Add-Padding': 'true' } });
+          return r.ok ? r.text() : '';
+        });
+        return { breached: n, ...pwData() };
+      },
+      setOfferToSave: (x) => (p.prefs.set('passwords.offerToSave', v.bool().parse(x, 'on')), pwData()),
+      allowSaving: (x) => {
+        const origin = v.string({ max: 512 }).parse(x, 'origin');
+        p.prefs.set('passwords.neverSave', p.prefs.get('passwords.neverSave').filter((o) => o !== origin));
+        return pwData();
+      },
+      importCsv: async (_x, ctx) => {
+        const w = ctx.window ?? a.focused();
+        const r = await dialog.showOpenDialog(w?.win as unknown as Electron.BrowserWindow, { title: t('import_passwords_title'), filters: [{ name: 'CSV', extensions: ['csv'] }], properties: ['openFile'] });
+        if (r.canceled || !r.filePaths[0]) return { imported: 0, ...pwData() };
+        const rows = parsePasswordCsv(readFileSync(r.filePaths[0], 'utf8'));
+        for (const row of rows) vault.add(row.origin, row.username, row.password, row.note);
+        changed();
+        return { imported: rows.length, ...pwData() };
+      },
+      exportCsv: async (_x, ctx) => {
+        if (!(await this.authorize(t('pw_export_reason')))) return false;
+        const w = ctx.window ?? a.focused();
+        const r = await dialog.showSaveDialog(w?.win as unknown as Electron.BrowserWindow, { title: t('pw_export'), defaultPath: 'Vizulla Passwords.csv', filters: [{ name: 'CSV', extensions: ['csv'] }] });
+        if (r.canceled || !r.filePath) return false;
+        writeFileSync(r.filePath, vault.exportCsv(), { mode: 0o600 });
+        return true;
+      },
+      open: (x) => {
+        const url = v.string({ max: 2048 }).parse(x, 'url');
+        if (/^https?:\/\//.test(url)) (a.focused() ?? a.openWindow()).loadUrl(null, url, { newTab: true });
+      },
+    });
+
+    // ---- Profiles: who's using Vizulla (each profile has its own data folder).
+    const prof = a.profiles;
+    const profData = () => {
+      prof.changed();
+      return { current: prof.currentId, profiles: prof.list().map((x) => ({ ...x, running: prof.isRunning(x.id) })), colors: PROFILE_COLORS };
+    };
+    const profileInput = v.object({ name: v.optional(v.string({ max: 40 })), color: v.optional(v.literal(...PROFILE_COLORS)) });
+    this.define('profiles', {
+      init: () => profData(),
+      open: (x) => prof.open(v.string({ max: 64 }).parse(x, 'id')),
+      create: (x) => {
+        const { name, color } = profileInput.parse(x, 'create');
+        const entry = prof.registry.create({ name: name ?? '', color });
+        prof.changed();
+        a.broadcastState();
+        prof.open(entry.id);
+        return profData();
+      },
+      update: (x) => {
+        const { id: pid, patch } = v.object({ id: v.string({ max: 64 }), patch: profileInput }).parse(x, 'update');
+        prof.registry.update(pid, patch);
+        prof.changed();
+        a.broadcastState();
+        return profData();
+      },
+      remove: (x) => {
+        const pid = v.string({ max: 64 }).parse(x, 'id');
+        if (prof.isRunning(pid)) throw new Error('profile is open');
+        prof.registry.remove(pid);
+        prof.changed();
+        a.broadcastState();
+        return profData();
+      },
     });
 
     // ---- Settings (P2-BRW-20)
@@ -270,7 +407,10 @@ export class InternalPages {
     const keys = p.service<{ hasKey(id: string): boolean }>('providerKeys');
     return {
       prefs: p.prefs.all(),
-      engines: Object.entries(SEARCH_ENGINES).map(([id, e]) => ({ id, name: e.name })),
+      engines: [
+        ...Object.entries(SEARCH_ENGINES).map(([id, e]) => ({ id, name: e.name, hint: new URL(e.url.replace('%s', '')).hostname })),
+        ...(p.prefs.get('search.custom') ? [{ id: 'custom', name: p.prefs.get('search.custom')!.name, hint: new URL(p.prefs.get('search.custom')!.url.replace('%s', 'q')).hostname }] : []),
+      ],
       locales: Object.entries(LOCALES).map(([id, name]) => ({ id, name })),
       providerKeys: Object.fromEntries(['anthropic', 'openai', 'google', 'openai-compatible', 'gateway'].map((id) => [id, keys?.hasKey(id) ?? false])),
       permissions: p.permissions.list(),

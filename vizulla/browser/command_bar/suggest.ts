@@ -1,7 +1,7 @@
 // Command Bar suggestions (P2-BRW-14): open tabs (switch-to-tab), pins, history,
 // bookmarks, commands, archive, search, ask, and Memory (R2). The deterministic
 // classifier picks the default action; providers only add rows (CMD-02/07).
-import { classifyInput, displayUrl, searchUrl, SEARCH_ENGINES, type SearchEngineId } from '@vz/common/url';
+import { classifyInput, displayUrl, engineName, searchUrl, type SearchEngineId } from '@vz/common/url';
 import type { CommandBarResult, Suggestion } from '@vz/common/types';
 import { fuzzyScore, matchCommands, type CommandDef } from './commands';
 
@@ -98,7 +98,7 @@ export function suggest(input: string, mode: SuggestMode, src: SuggestSources): 
   for (const h of src.history(q, 6)) push({ id: `nav:${h.url}`, kind: 'history', title: h.title || displayUrl(h.url), detail: displayUrl(h.url), favicon: h.favicon, section: 'history' });
 
   const text = route.route === 'search' ? route.text : q;
-  push({ id: `search:${text}`, kind: 'search', title: text, detail: src.strings.searchFor.replace('{engine}', SEARCH_ENGINES[src.searchEngine].name), icon: 'search', section: 'search' });
+  push({ id: `search:${text}`, kind: 'search', title: text, detail: src.strings.searchFor.replace('{engine}', engineName(src.searchEngine)), icon: 'search', section: 'search' });
   if (src.aiEnabled && text.split(/\s+/).length >= 2) push({ id: `ask:${text}`, kind: 'ask', title: text, detail: src.strings.ask, icon: 'sparkle', section: 'ai' });
 
   const chips = (src.intents?.(q) ?? []).filter((c) => c.confidence < 0.7);

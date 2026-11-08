@@ -2,24 +2,36 @@
 // Binds IPC interfaces, routes commands, builds the application menu with
 // Chrome-compatible accelerators, runs tab lifecycle timers, and exposes the
 // extension points later phases register into (panels, AI actions, agent).
-import { app, BrowserWindow, Menu, nativeTheme, session as electronSession, shell, type MenuItemConstructorOptions, type Session } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, session as electronSession, shell, type MenuItemConstructorOptions, type Session } from 'electron';
 import { join } from 'node:path';
 import type { Profile } from './profile';
-import { BrowserWindowController, WEBUI_PRELOAD } from './ui/browser_window';
+import { BrowserWindowController, WEBUI_PRELOAD, type WindowInit } from './ui/browser_window';
 import { IpcRouter, emitTo, type CallContext } from './ui/ipc_router';
 import { OverlayInterface, PagesInterface, ShellInterface } from '@vz/common/mojom/shell';
 import { installWebUIHandler } from './ui/webui_protocol';
 import { COMMANDS, findCommand, type CommandDef } from './command_bar/commands';
 import { resolveAccept, suggest, type SuggestSources } from './command_bar/suggest';
 import { setLocale, resolveLocale, t, type StringKey } from '@vz/common/i18n';
-import { displayUrl, searchUrl } from '@vz/common/url';
+import { displayUrl, searchUrl, setCustomEngine } from '@vz/common/url';
 import type { AgentBarState, PanelKind } from '@vz/common/types';
 import { ALL_FEATURES } from './vizulla_features';
 import { InternalPages } from './ui/internal_pages';
 import { confirmNl } from './ai/ai_features';
+import { UpdateService } from './updates/update_service';
+import { PasswordService } from './passwords/password_service';
+import { profileArgs, Profiles } from './profiles/profiles';
+import { BRANDING } from '../app/branding';
 
 export type CommandHandler = (w: BrowserWindowController, args?: Record<string, unknown>) => unknown;
 export type PageMethod = (payload: unknown, ctx: CallContext & { window: BrowserWindowController | null }) => unknown;
+
+/** Accept-Language per UI language, most specific first; English is the fallback everywhere. */
+const WEB_LANGUAGES: Record<string, string[]> = {
+  en: ['en-US', 'en'],
+  fr: ['fr-FR', 'fr', 'en'],
+  rw: ['rw-RW', 'rw', 'en', 'fr'],
+  sw: ['sw', 'sw-KE', 'sw-TZ', 'en'],
+};
 
 export class BrowserApp {
   readonly windows = new Set<BrowserWindowController>();
@@ -46,10 +58,16 @@ export class BrowserApp {
   private privateProfiles = new Set<Profile>();
   private timers: NodeJS.Timeout[] = [];
   readonly pages: InternalPages;
+  readonly updates: UpdateService;
+  readonly passwords: PasswordService;
+  readonly profiles: Profiles;
 
   constructor(readonly profile: Profile, readonly outDir: string) {
     this.preloadPath = WEBUI_PRELOAD(outDir);
     this.chromeSession = electronSession.fromPartition('persist:vizulla-chrome');
+    ipcMain.on('vz:web-languages', (e) => {
+      e.returnValue = this.webLanguages.get(e.sender.session) ?? [];
+    });
     this.applyLocale();
     profile.prefs.observe('appearance.locale', () => {
       this.applyLocale();
@@ -65,6 +83,11 @@ export class BrowserApp {
     nativeTheme.themeSource = profile.prefs.get('appearance.theme') === 'high-contrast' ? 'dark' : (profile.prefs.get('appearance.theme') as 'system' | 'light' | 'dark');
     nativeTheme.on('updated', () => this.broadcastState());
     profile.prefs.observe('shields.doh', () => profile.shields.applyDnsConfig());
+    setCustomEngine(profile.prefs.get('search.custom'));
+    profile.prefs.observe('search.custom', (v) => {
+      setCustomEngine(v);
+      if (!v && profile.prefs.get('search.engine') === 'custom') profile.prefs.set('search.engine', 'duckduckgo');
+    });
     profile.spaces.on('changed', () => this.broadcastState());
     profile.spaces.on('archive-changed', () => this.broadcastState());
 
@@ -72,6 +95,27 @@ export class BrowserApp {
     profile.permissions.install(profile.session, (wc, origin, permission) => this.promptPermission(wc, origin, permission));
     this.blockWebUINavigationFromWeb(profile.session);
 
+    const testFeed = !!process.env.VZ_TEST && !!process.env.VZ_UPDATE_FEED;
+    this.updates = new UpdateService({
+      // A private, in-memory session: update checks carry no cookies or history.
+      session: electronSession.fromPartition('vizulla-updates'),
+      version: app.getVersion(),
+      packaged: app.isPackaged || testFeed,
+      feedUrl: BRANDING.updateFeedUrl,
+      dir: join(app.getPath('userData'), 'Updates'),
+      autoCheck: () => profile.prefs.get('updates.autoCheck'),
+      onChange: () => this.broadcastState(),
+      quit: () => {
+        this.prepareToQuit();
+        app.quit();
+      },
+      reveal: (target) => (/^https:/.test(target) ? this.openInTab(target) : shell.showItemInFolder(target)),
+      allowUrl: testFeed ? (u) => u.startsWith('http://127.0.0.1:') : undefined,
+    });
+    if (!process.env.VZ_TEST || testFeed) this.updates.start(testFeed ? 500 : 15_000);
+    const pa = profileArgs(process.argv, app.getPath('userData'));
+    this.profiles = new Profiles(pa.id, pa.root, () => void this.openWindow());
+    this.passwords = new PasswordService(this);
     this.pages = new InternalPages(this);
     this.bindInterfaces();
     this.registerBaseCommands();
@@ -81,19 +125,68 @@ export class BrowserApp {
 
   // ------------------------------------------------------------ windows
 
-  openWindow(opts: { private?: boolean; restore?: import('./spaces/spaces_service').SessionWindow | null } = {}): BrowserWindowController {
-    let profile = this.profile;
-    if (opts.private) {
+  openWindow(opts: { private?: boolean; restore?: import('./spaces/spaces_service').SessionWindow | null; profile?: Profile; init?: WindowInit } = {}): BrowserWindowController {
+    let profile = opts.profile ?? this.profile;
+    if (opts.private && !opts.profile) {
       profile = this.profile.createPrivate();
       this.privateProfiles.add(profile);
       installWebUIHandler(profile.session, { outDir: this.outDir, dynamic: {} });
+      this.applyWebLanguage(profile.session);
       profile.permissions.install(profile.session, (wc, origin, permission) => this.promptPermission(wc, origin, permission));
     }
-    const w = new BrowserWindowController(this, profile, opts.restore ?? null);
+    const w = new BrowserWindowController(this, profile, opts.restore ?? null, opts.init);
     this.windows.add(w);
     this.lastFocused = w;
     for (const fn of this.hooks.windowCreated) fn(w);
     return w;
+  }
+
+  /**
+   * Moves live tabs between windows of one profile: dragged out of a strip
+   * ('new', placed at the drop point), dragged onto another strip, or from the
+   * tab menu. Agent tabs stay put. A window left with no tabs closes.
+   */
+  moveTabs(ids: number[], to: BrowserWindowController | 'new', opts: { index?: number; point?: { x: number; y: number } } = {}): BrowserWindowController | null {
+    const owner = (id: number) => [...this.windows].find((w) => w.tabs.has(id));
+    const first = ids.map(owner).find(Boolean);
+    if (!first) return null;
+    const profile = to === 'new' ? first.profile : to.profile;
+    const picked = ids
+      .map((id) => ({ id, from: owner(id) }))
+      .filter((x): x is { id: number; from: BrowserWindowController } => !!x.from && x.from.profile === profile && x.from !== to);
+    // Dragging every tab out of a window is just moving that window.
+    if (to === 'new' && picked.length && picked.every((x) => x.from === first) && picked.length === first.model.all().length) {
+      if (opts.point) first.win.setPosition(Math.round(opts.point.x - 120), Math.round(opts.point.y - 16));
+      first.win.focus();
+      return first;
+    }
+    const released = picked.map((x) => ({ from: x.from, r: x.from.releaseTab(x.id) })).filter((x) => x.r);
+    if (!released.length) return null;
+    let target: BrowserWindowController;
+    if (to === 'new') {
+      const [width, height] = first.win.getSize();
+      const bounds = opts.point
+        ? { x: Math.round(opts.point.x - 120), y: Math.round(opts.point.y - 16), width: width!, height: height! }
+        : { ...first.win.getBounds(), x: first.win.getBounds().x + 32, y: first.win.getBounds().y + 32 };
+      target = this.openWindow({ profile, init: { bounds, adopt: released.map((x) => x.r!) } });
+    } else {
+      target = to;
+      released.forEach((x, i) => target.adoptTab(x.r!.tab, { pinned: x.r!.pinned, index: opts.index === undefined ? undefined : opts.index + i, activate: i === released.length - 1 }));
+    }
+    for (const from of new Set(released.map((x) => x.from))) {
+      if (!from.model.all().length) from.win.close();
+      else if (!from.model.visible().length) from.createTab({ url: 'vizulla://newtab/', activate: true });
+    }
+    target.win.focus();
+    target.focusActive();
+    return target;
+  }
+
+  /** Other windows of the same profile, for "Move to window" menus. */
+  windowChoices(w: BrowserWindowController): { w: BrowserWindowController; label: string }[] {
+    return this.windowsOf(w.profile)
+      .filter((x) => x !== w)
+      .map((x) => ({ w: x, label: x.activeTab()?.title || t('window_untitled') }));
   }
 
   restoreOrOpen(): void {
@@ -316,8 +409,26 @@ export class BrowserApp {
     });
     c.set('window.newPrivate', () => void this.openWindow({ private: true }));
     c.set('window.new', () => void this.openWindow());
+    c.set('app.checkUpdates', async (w) => {
+      w.toast(t('upd_checking'), undefined, 2000);
+      const r = await this.updates.check();
+      if (r === 'latest') w.toast(t('upd_latest'), undefined, 3000);
+      else if (r === 'error') w.toast(t('upd_failed', { error: 'offline' }), undefined, 4000);
+    });
+    c.set('app.update', () => void this.updates.activate());
+    c.set('window.next', (w) => {
+      const list = this.windowsOf(w.profile);
+      if (list.length > 1) list[(list.indexOf(w) + 1) % list.length]!.win.focus();
+    });
+    c.set('tab.moveToNewWindow', (w) => {
+      const id = w.model.activeTabId;
+      if (id !== null && w.model.all().length > 1) this.moveTabs([id], 'new');
+    });
     c.set('page.settings', page('vizulla://settings'));
     c.set('page.history', page('vizulla://history'));
+    c.set('page.passwords', (w) => this.passwords.open(w));
+    c.set('profile.manage', (w) => this.openProfiles(w));
+    c.set('profile.add', (w) => this.openProfiles(w, true));
     c.set('page.downloads', page('vizulla://downloads'));
     c.set('page.bookmarks', page('vizulla://bookmarks'));
     c.set('page.privacy', page('vizulla://privacy'));
@@ -386,7 +497,15 @@ export class BrowserApp {
         moveTabToSpace: (ctx, id, spaceId) => {
           if (win(ctx).profile.spaces.get(spaceId)) win(ctx).model.moveToSpace(id, spaceId);
         },
-        showTabMenu: (ctx, id, point) => this.showTabMenu(win(ctx), id, point),
+        showTabMenu: (ctx, id, point, selection) => this.showTabMenu(win(ctx), id, point, selection),
+        showPasswordMenu: (ctx, id, point) => {
+          const w = win(ctx);
+          const tab = w.tabs.get(id);
+          if (tab) this.passwords.showMenu(w, tab, point);
+        },
+        showProfileMenu: (ctx, point) => this.showProfileMenu(win(ctx), point),
+        detachTabs: (ctx, ids, point) => void this.moveTabs(ids.filter((x) => win(ctx).tabs.has(x)), 'new', { point }),
+        adoptTabs: (ctx, ids, index) => void this.moveTabs(ids, win(ctx), { index }),
         showSpaceMenu: (ctx, spaceId, point) => this.showSpaceMenu(win(ctx), spaceId, point),
         showAppMenu: (ctx, point) => win(ctx).showMenuAt(this.appMenu(win(ctx)), point),
         switchSpace: (ctx, id) => win(ctx).switchSpace(id),
@@ -485,14 +604,18 @@ export class BrowserApp {
     const p = w.profile;
     const spaces = new Map(p.spaces.list().map((s) => [s.id, s.name]));
     const base: SuggestSources = {
-      tabs: () =>
-        [...w.model.all()]
-          .sort((a, b) => b.lastActive - a.lastActive)
-          .map((m) => {
-            const tab = w.tabs.get(m.id)!;
-            return { id: m.id, title: tab.title, url: tab.url, favicon: tab.favicon, spaceName: spaces.get(m.spaceId) ?? '', pinned: m.pinned, active: m.id === w.model.activeTabId };
+      // Tab search spans every window of the profile; other windows are labelled.
+      tabs: () => {
+        const wins = this.windowsOf(p);
+        return wins
+          .flatMap((x, n) => x.model.all().map((m) => ({ x, m, label: x === w || wins.length < 2 ? '' : ` · ${t('window_n', { n: n + 1 })}` })))
+          .sort((a, b) => Number(b.x === w) - Number(a.x === w) || b.m.lastActive - a.m.lastActive)
+          .map(({ x, m, label }) => {
+            const tab = x.tabs.get(m.id)!;
+            return { id: m.id, title: tab.title, url: tab.url, favicon: tab.favicon, spaceName: (spaces.get(m.spaceId) ?? '') + label, pinned: m.pinned, active: x === w && m.id === w.model.activeTabId };
           })
-          .filter((x) => !x.url.startsWith('vizulla://newtab')),
+          .filter((x) => !x.url.startsWith('vizulla://newtab'));
+      },
       history: (q, n) => p.history.search(q, n),
       bookmarks: (q, n) => p.history.searchBookmarks(q, n),
       archive: (q, n) =>
@@ -518,9 +641,12 @@ export class BrowserApp {
       case 'navigate':
         w.loadUrl(newTab ? null : tab!.id, action.url, { typed: action.typed, newTab });
         break;
-      case 'switch-tab':
-        w.activateTab(action.tabId);
+      case 'switch-tab': {
+        const owner = this.windowsOf(w.profile).find((x) => x.tabs.has(action.tabId)) ?? w;
+        owner.activateTab(action.tabId);
+        if (owner !== w) owner.win.focus();
         break;
+      }
       case 'command':
         if (suggestionId?.startsWith('nl:')) void confirmNl(this, w, action.id).then((ok) => { if (ok) void this.runCommand(w, action.id, action.args); });
         else void this.runCommand(w, action.id, action.args);
@@ -537,11 +663,14 @@ export class BrowserApp {
     }
   }
 
-  private showTabMenu(w: BrowserWindowController, id: number, point?: { x: number; y: number }): void {
+  private showTabMenu(w: BrowserWindowController, id: number, point?: { x: number; y: number }, selection?: number[]): void {
     const tab = w.tabs.get(id);
     const m = w.model.get(id);
     if (!tab || !m) return;
+    const sel = (selection ?? []).filter((x) => w.tabs.has(x));
+    if (sel.length > 1 && sel.includes(id)) return this.showMultiTabMenu(w, sel, point);
     const spaces = w.profile.spaces.list().filter((s) => s.id !== m.spaceId);
+    const windows = this.windowChoices(w);
     const groups = w.model.groupList(m.spaceId);
     const items: MenuItemConstructorOptions[] = [
       { label: m.pinned ? t('ctx_unpin') : t('ctx_pin'), click: () => w.model.setPinned(id, !m.pinned) },
@@ -554,6 +683,8 @@ export class BrowserApp {
       { label: t('ctx_open_split'), enabled: id !== w.model.activeTabId, click: () => w.setSplit(id) },
       { type: 'separator' },
       { label: t('ctx_move_to_space'), enabled: spaces.length > 0, submenu: spaces.map((s) => ({ label: s.name, click: () => w.model.moveToSpace(id, s.id) })) },
+      { label: t('ctx_move_to_new_window'), enabled: !tab.agent, click: () => this.moveTabs([id], 'new') },
+      ...(windows.length ? [{ label: t('ctx_move_to_window'), enabled: !tab.agent, submenu: windows.map((x) => ({ label: x.label, click: () => this.moveTabs([id], x.w) })) }] : []),
       {
         label: t('ctx_add_to_group'),
         enabled: !m.pinned,
@@ -573,6 +704,49 @@ export class BrowserApp {
       { type: 'separator' },
       { label: t('cmd_tab_close'), click: () => w.closeTab(id) },
       { label: t('cmd_tab_close_others'), click: () => w.model.visible(m.spaceId).filter((x) => x.id !== id && !x.pinned).forEach((x) => w.closeTab(x.id)) },
+    ];
+    w.showMenuAt(Menu.buildFromTemplate(items), point);
+  }
+
+  /** The toolbar avatar: this profile, the others, and profile management. */
+  private showProfileMenu(w: BrowserWindowController, point?: { x: number; y: number }): void {
+    const cur = this.profiles.current();
+    const others = this.profiles.list().filter((p) => p.id !== cur.id).sort((a, b) => b.lastUsed - a.lastUsed);
+    const items: MenuItemConstructorOptions[] = [
+      { label: cur.name, sublabel: t('profile_current'), enabled: false },
+      { type: 'separator' },
+      ...others.map((p) => ({ label: p.name, click: () => this.profiles.open(p.id) })),
+      ...(others.length ? [{ type: 'separator' as const }] : []),
+      { label: t('profile_add'), click: () => this.openProfiles(w, true) },
+      { label: t('profile_manage'), click: () => this.openProfiles(w) },
+      { type: 'separator' },
+      { label: t('cmd_new_private'), click: () => void this.openWindow({ private: true }) },
+    ];
+    w.showMenuAt(Menu.buildFromTemplate(items), point);
+  }
+
+  openProfiles(w: BrowserWindowController, add = false): void {
+    w.loadUrl(null, add ? 'vizulla://profiles/#new' : 'vizulla://profiles/', { newTab: true });
+  }
+
+  private showMultiTabMenu(w: BrowserWindowController, ids: number[], point?: { x: number; y: number }): void {
+    const metas = ids.map((x) => w.model.get(x)!).filter(Boolean);
+    const count = metas.length;
+    const allPinned = metas.every((x) => x.pinned);
+    const unpinned = metas.filter((x) => !x.pinned).map((x) => x.id);
+    const spaces = w.profile.spaces.list().filter((s) => s.id !== w.model.activeSpaceId);
+    const windows = this.windowChoices(w);
+    const items: MenuItemConstructorOptions[] = [
+      { label: t('ctx_selected_tabs', { count }), enabled: false },
+      { type: 'separator' },
+      { label: t(allPinned ? 'ctx_unpin_tabs' : 'ctx_pin_tabs', { count }), click: () => ids.forEach((x) => w.model.setPinned(x, !allPinned)) },
+      { label: t('ctx_group_tabs', { count: unpinned.length }), enabled: unpinned.length > 0, click: () => w.model.createGroup(unpinned, t('group_default_title'), w.state().accent) },
+      { label: t('ctx_move_to_space'), enabled: spaces.length > 0, submenu: spaces.map((s) => ({ label: s.name, click: () => ids.forEach((x) => w.model.moveToSpace(x, s.id)) })) },
+      { label: t('ctx_move_to_new_window'), click: () => this.moveTabs(ids, 'new') },
+      ...(windows.length ? [{ label: t('ctx_move_to_window'), submenu: windows.map((x) => ({ label: x.label, click: () => this.moveTabs(ids, x.w) })) }] : []),
+      { label: t('ctx_bookmark_tabs', { count }), click: () => ids.forEach((x) => { const tb = w.tabs.get(x); if (tb && !tb.url.startsWith('vizulla://')) w.profile.history.addBookmark(tb.url, tb.title); }) },
+      { type: 'separator' },
+      { label: t('ctx_close_tabs', { count }), click: () => ids.forEach((x) => w.closeTab(x)) },
     ];
     w.showMenuAt(Menu.buildFromTemplate(items), point);
   }
@@ -634,15 +808,15 @@ export class BrowserApp {
     }
     const template: MenuItemConstructorOptions[] = [
       ...(process.platform === 'darwin'
-        ? [{ label: 'Vizulla', submenu: [item('page.about'), { type: 'separator' }, item('page.settings'), { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] } as MenuItemConstructorOptions]
+        ? [{ label: 'Vizulla', submenu: [item('page.about'), item('app.checkUpdates'), { type: 'separator' }, item('page.settings'), { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] } as MenuItemConstructorOptions]
         : []),
       { label: t('menu_file'), submenu: [item('tab.new'), item('window.new'), item('window.newPrivate'), item('tab.reopen'), { type: 'separator' }, item('tab.close'), item('page.import'), ...(process.platform !== 'darwin' ? [{ type: 'separator' } as const, { role: 'quit' } as const] : [])] },
       { label: t('menu_edit'), submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, { type: 'separator' }, item('view.find'), item('nav.copyUrl')] },
       { label: t('menu_view'), submenu: [item('nav.commandBar'), item('nav.focusAddress'), item('view.toggleSidebar'), item('view.toggleLayout'), item('view.classic'), item('view.reader'), item('ai.panel'), { type: 'separator' }, item('view.zoomIn'), item('view.zoomOut'), item('view.zoomReset'), item('view.fullscreen'), { type: 'separator' }, item('view.devtools')] },
       { label: t('menu_tabs'), submenu: [item('tab.next'), item('tab.previous'), item('tab.search'), item('tab.pin'), item('tab.mute'), item('tab.duplicate'), item('tab.split'), item('tab.archiveIdle'), { type: 'separator' }, item('space.next'), item('space.previous'), item('space.new'), item('focus.toggle'), ...hidden] },
-      { label: t('menu_go'), submenu: [item('nav.back'), item('nav.forward'), item('nav.reload'), item('nav.hardReload'), { type: 'separator' }, item('page.history'), item('page.bookmarks'), item('nav.bookmark'), item('page.downloads'), item('page.privacy'), item('page.archive')] },
+      { label: t('menu_go'), submenu: [item('nav.back'), item('nav.forward'), item('nav.reload'), item('nav.hardReload'), { type: 'separator' }, item('page.history'), item('page.bookmarks'), item('nav.bookmark'), item('page.downloads'), item('page.passwords'), item('page.privacy'), item('page.archive')] },
       { label: t('menu_window'), role: 'windowMenu' },
-      { label: t('menu_help'), role: 'help', submenu: [item('page.about'), item('page.flags'), { label: t('menu_report_issue'), click: () => void shell.openExternal('https://github.com/') }] },
+      { label: t('menu_help'), role: 'help', submenu: [item('page.about'), item('app.checkUpdates'), item('page.flags'), { label: t('menu_report_issue'), click: () => void shell.openExternal('https://github.com/') }] },
     ];
     return Menu.buildFromTemplate(template);
   }
@@ -691,7 +865,33 @@ export class BrowserApp {
     const pref = this.profile.prefs.get('appearance.locale');
     this.locale = pref === 'auto' ? resolveLocale(app.getPreferredSystemLanguages()) : pref;
     setLocale(this.locale);
+    this.applyWebLanguage(this.profile.session);
+    for (const p of this.privateProfiles) this.applyWebLanguage(p.session);
   }
+
+  /**
+   * Websites see the browser's language: the Accept-Language header and
+   * navigator.language(s) follow it, so sites open in Kinyarwanda, Kiswahili,
+   * French or English when they offer it. "Auto" keeps the system's languages.
+   */
+  applyWebLanguage(ses: Session): void {
+    const pref = this.profile.prefs.get('appearance.locale');
+    const list = pref === 'auto' || pref === 'pseudo' ? app.getPreferredSystemLanguages() : WEB_LANGUAGES[pref] ?? ['en-US', 'en'];
+    const langs = [...new Set([...list, 'en'])].slice(0, 6);
+    ses.setUserAgent(ses.getUserAgent(), langs.join(','));
+    this.webLanguages.set(ses, langs);
+    if (!this.langPreloaded.has(ses)) {
+      this.langPreloaded.add(ses);
+      try {
+        ses.registerPreloadScript({ type: 'frame', id: 'vz-lang', filePath: this.joinOut('preload', 'lang_preload.js') });
+      } catch (err) {
+        console.warn('[vz] web language preload unavailable', err);
+      }
+    }
+  }
+
+  private readonly webLanguages = new WeakMap<Session, string[]>();
+  private readonly langPreloaded = new WeakSet<Session>();
 
   prepareToQuit(): void {
     if (this.quitting) return;
@@ -699,8 +899,15 @@ export class BrowserApp {
     for (const w of this.windows) w.saveNow();
   }
 
+  /** Opens a URL in a new tab of the focused window. */
+  openInTab(url: string): void {
+    const w = this.focused() ?? this.openWindow();
+    w.loadUrl(null, url, { newTab: true });
+  }
+
   shutdown(): void {
     this.prepareToQuit();
+    this.updates.stop();
     for (const x of this.timers) clearInterval(x);
     for (const p of this.privateProfiles) p.shutdown();
     this.profile.shutdown();

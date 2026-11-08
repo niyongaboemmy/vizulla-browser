@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyInput, displayUrl, securityStateOf, siteOf } from './url';
+import { classifyInput, displayUrl, engineName, isValidEngineTemplate, searchUrl, securityStateOf, setCustomEngine, siteOf } from './url';
 
 const nav = (input: string) => {
   const r = classifyInput(input);
@@ -85,5 +85,27 @@ describe('securityStateOf / siteOf', () => {
     expect(siteOf('https://a.b.example.com/x')).toBe('example.com');
     expect(siteOf('https://www.irembo.gov.rw/')).toBe('irembo.gov.rw');
     expect(siteOf('https://news.bbc.co.uk/')).toBe('bbc.co.uk');
+  });
+});
+
+describe('custom search engine', () => {
+  it('accepts only https templates with exactly one %s', () => {
+    expect(isValidEngineTemplate('https://search.example.rw/?q=%s')).toBe(true);
+    expect(isValidEngineTemplate('http://search.example.rw/?q=%s')).toBe(false);
+    expect(isValidEngineTemplate('https://search.example.rw/?q=')).toBe(false);
+    expect(isValidEngineTemplate('https://a.rw/?q=%s&r=%s')).toBe(false);
+    expect(isValidEngineTemplate('https://user:pw@a.rw/?q=%s')).toBe(false);
+    expect(isValidEngineTemplate('javascript:alert(%s)')).toBe(false);
+  });
+
+  it('is used for "custom" and falls back to DuckDuckGo when unset or invalid', () => {
+    setCustomEngine({ name: 'Kigali Search', url: 'https://search.example.rw/find?q=%s' });
+    expect(searchUrl('custom', 'umuganda & more')).toBe('https://search.example.rw/find?q=umuganda%20%26%20more');
+    expect(engineName('custom')).toBe('Kigali Search');
+    setCustomEngine({ name: 'Bad', url: 'http://x.rw/?q=%s' });
+    expect(searchUrl('custom', 'a')).toBe('https://duckduckgo.com/?q=a');
+    setCustomEngine(null);
+    expect(engineName('custom')).toBe('DuckDuckGo');
+    expect(searchUrl('google', 'a b')).toBe('https://www.google.com/search?q=a%20b');
   });
 });

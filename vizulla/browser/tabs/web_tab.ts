@@ -50,7 +50,7 @@ export class WebTab extends EventEmitter {
   crashed = false;
   private nav: NavState | null;
   private readonly preload: string;
-  private readonly onOpen: WebTabOptions['onOpen'];
+  private onOpen: WebTabOptions['onOpen'];
 
   constructor(opts: WebTabOptions) {
     super();
@@ -64,6 +64,11 @@ export class WebTab extends EventEmitter {
     this.nav = opts.nav ?? null;
     if (opts.adoptView) this.attach(opts.adoptView);
     else if (!opts.discarded) this.ensureLive();
+  }
+
+  /** Re-targets window.open when the tab moves to another window. */
+  setOpener(fn: WebTabOptions['onOpen']): void {
+    this.onOpen = fn;
   }
 
   get discarded(): boolean {

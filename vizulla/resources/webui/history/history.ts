@@ -12,7 +12,7 @@ class VzHistory extends VzPage<{ total: number }> {
   q = '';
   static override styles = [base, pageStyles, css`.day { font-size: var(--vz-text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--vz-text-3); margin: 20px 12px 6px; }
     .time { color: var(--vz-text-3); font-size: var(--vz-text-s); width: 56px; font-variant-numeric: tabular-nums; } .host { color: var(--vz-text-3); font-size: var(--vz-text-s); }
-    .list-item { cursor: pointer; } .list-item .del { opacity: 0; } .list-item:hover .del { opacity: 1; } input[type=search] { width: 280px; height: 34px; }`];
+    .list-item { cursor: pointer; } .list-item .del { opacity: 0; } .list-item:hover .del { opacity: 1; } input[type=search] { width: min(280px, 100%); height: 34px; }`];
 
   protected override loaded(): void {
     void this.load();

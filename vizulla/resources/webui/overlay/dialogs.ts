@@ -80,3 +80,23 @@ function permIcon(p: string): string {
   if (p === 'notifications') return 'info';
   return 'key';
 }
+
+// Save or update a login after a sign-in (passwords). The password itself never
+// reaches this dialog: it shows dots, and the browser keeps the value.
+registerDialog('save-password', (d, host) => {
+  const draft = host.draft as { username?: string };
+  draft.username ??= String(d.username ?? '');
+  const update = !!d.update;
+  return html`
+    <div class="pw-head"><span class="pw-key">${icon('key', 20)}</span>
+      <div><h2 id="dlg-title">${update ? t('pw_update_title') : t('pw_save_title')}</h2><div class="muted">${d.site}</div></div></div>
+    <label class="field"><span>${t('pw_username')}</span>
+      <input type="text" .value=${draft.username} ?readonly=${update} @input=${(e: InputEvent) => ((draft.username = (e.target as HTMLInputElement).value), host.requestUpdate())} /></label>
+    <label class="field"><span>${t('pw_password')}</span><input type="password" value="••••••••••" readonly tabindex="-1" aria-hidden="true" /></label>
+    <div class="actions">
+      ${update ? '' : html`<button class="btn ghost" @click=${() => host.resolve({ action: 'never' })}>${t('pw_never')}</button>`}
+      <span style="flex:1"></span>
+      <button class="btn" @click=${() => host.resolve({ action: 'dismiss' })}>${t('pw_not_now')}</button>
+      <button class="btn primary" autofocus @click=${() => host.resolve({ action: 'save', username: draft.username })}>${update ? t('pw_update') : t('action_save')}</button>
+    </div>`;
+});

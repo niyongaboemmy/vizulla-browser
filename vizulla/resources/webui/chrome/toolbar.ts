@@ -4,8 +4,9 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { base } from '../shared/styles';
 import { icon } from '../shared/icons';
+import { PROFILE_HEX } from '@vz/common/tokens';
 import { t } from '@vz/common/i18n';
-import type { WindowState } from '@vz/common/types';
+import type { UpdateInfo, WindowState } from '@vz/common/types';
 import { shell } from './shell';
 import { securityIcon } from './common';
 
@@ -17,7 +18,7 @@ export class VzToolbar extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; align-items: center; gap: 2px; height: 46px; padding: 0 8px; background: var(--vz-toolbar); box-shadow: 0 1px 0 var(--vz-border); position: relative; z-index: 1; }
+      :host { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 10px; background: var(--vz-toolbar-bg, var(--vz-toolbar)); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 1px 0 var(--vz-border); position: relative; z-index: 1; }
       :host([mode='compact']) { -webkit-app-region: drag; }
       :host > * { -webkit-app-region: no-drag; }
       .icon-btn { width: 34px; height: 34px; border-radius: 50%; }
@@ -46,6 +47,35 @@ export class VzToolbar extends LitElement {
       .toast button:hover { background: var(--vz-surface-hover); }
       @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } }
       .on { color: var(--vz-accent); background: var(--vz-accent-soft); }
+      /* Update button: tinted when available, a progress ring while downloading, solid when ready. */
+      .upd { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 9px; margin: 0 2px; border: 0; border-radius: 999px; cursor: pointer; flex: none;
+        background: var(--vz-accent-soft); color: var(--vz-accent); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+        animation: pop 260ms var(--vz-ease); transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .upd:hover { transform: translateY(-1px); }
+      .upd:active { transform: scale(.96); }
+      .upd[disabled] { cursor: default; transform: none; }
+      .upd.ready { background: var(--vz-accent); color: var(--vz-on-accent); animation: pop 260ms var(--vz-ease), breathe 2.6s ease-in-out 600ms infinite; }
+      .upd.error { background: color-mix(in srgb, var(--vz-danger) 12%, transparent); color: var(--vz-danger); }
+      .upd .ring { width: 16px; height: 16px; border-radius: 50%;
+        background: conic-gradient(var(--vz-accent) calc(var(--p) * 1%), color-mix(in srgb, var(--vz-accent) 18%, transparent) 0);
+        -webkit-mask: radial-gradient(circle, transparent 4.5px, #000 5px); transition: --p 200ms; }
+      @keyframes breathe { 50% { transform: scale(1.05); } }
+      /* Responsive: secondary controls fold into the ⋮ menu as the window narrows. */
+      .me-av { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 11.5px; font-weight: 700; transition: transform var(--vz-dur) var(--vz-ease); }
+      .me:hover .me-av { transform: scale(1.08); }
+      .tabs-btn { display: none; }
+      @media (max-width: 760px) {
+        .wide { display: none; }
+        .omni { margin: 0 2px; }
+        .toast { max-width: 180px; }
+      }
+      @media (max-width: 599px) {
+        .mid { display: none; }
+        .tabs-btn { display: grid; }
+        .sidebar-btn { display: none; }
+        .toast span { display: none; }
+        .icon-btn { width: 32px; height: 32px; }
+      }
     `,
   ];
 
@@ -59,14 +89,15 @@ export class VzToolbar extends LitElement {
     const toast = s.toasts.at(-1);
     return html`
       ${compact && mac && !s.fullscreen ? html`<span class="lead" style="--traffic:70px"></span>` : nothing}
-      ${compact ? html`<button class="icon-btn" aria-label=${t('cmd_toggle_sidebar')} title=${t('cmd_toggle_sidebar')} @click=${() => shell.runCommand('view.toggleSidebar')}>${icon('sidebar', 17)}</button>` : nothing}
-      <button class="icon-btn" aria-label=${t('cmd_nav_back')} title=${t('cmd_nav_back')} ?disabled=${!tab?.canGoBack} @click=${() => tab && shell.goBack(tab.id)}>${icon('arrow-left', 17)}</button>
-      <button class="icon-btn" aria-label=${t('cmd_nav_forward')} title=${t('cmd_nav_forward')} ?disabled=${!tab?.canGoForward} @click=${() => tab && shell.goForward(tab.id)}>${icon('arrow-right', 17)}</button>
-      <button class="icon-btn" aria-label=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} title=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')}
+      ${compact ? html`<button class="icon-btn sidebar-btn" aria-label=${t('cmd_toggle_sidebar')} title=${t('cmd_toggle_sidebar')} @click=${() => shell.runCommand('view.toggleSidebar')}>${icon('sidebar', 17)}</button>
+        <button class="icon-btn tabs-btn" aria-label=${t('cmd_tab_search')} title=${t('cmd_tab_search')} @click=${() => shell.runCommand('tab.search')}>${icon('layers', 17)}</button>` : nothing}
+      <button class="icon-btn" aria-label=${t('cmd_nav_back')} title=${t('cmd_nav_back')} data-kbd=${mac ? '⌘[' : 'Alt+←'} ?disabled=${!tab?.canGoBack} @click=${() => tab && shell.goBack(tab.id)}>${icon('arrow-left', 17)}</button>
+      <button class="icon-btn mid" aria-label=${t('cmd_nav_forward')} title=${t('cmd_nav_forward')} data-kbd=${mac ? '⌘]' : 'Alt+→'} ?disabled=${!tab?.canGoForward} @click=${() => tab && shell.goForward(tab.id)}>${icon('arrow-right', 17)}</button>
+      <button class="icon-btn" aria-label=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} title=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} data-kbd=${tab?.loading ? 'Esc' : mac ? '⌘R' : 'Ctrl+R'}
         @click=${() => tab && (tab.loading ? shell.stop(tab.id) : shell.reload(tab.id))}>${icon(tab?.loading ? 'x' : 'refresh', 16)}</button>
       <div class="omni">
         <span class="sec ${sec}" title=${t(`security_${sec}` as never)}>${icon(securityIcon(sec), 14, t(`security_${sec}` as never))}${sec === 'insecure' || sec === 'dangerous' ? html`<span>${t(`security_${sec}_short` as never)}</span>` : nothing}</span>
-        <button class="addr" title=${t('cb_address_label')} @click=${(e: MouseEvent) => this.open(e)}>
+        <button class="addr" title=${t('cb_address_label')} data-kbd=${mac ? '⌘L' : 'Ctrl+L'} @click=${(e: MouseEvent) => this.open(e)}>
           ${host ? html`<span class="host">${host}</span><span class="path">${path}</span>` : html`<span class="ph">${t('cb_placeholder')}</span>`}
         </button>
         ${tab && /^https?:/.test(tab.url)
@@ -75,21 +106,53 @@ export class VzToolbar extends LitElement {
                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 void shell.openShieldsPanel({ x: r.x, y: r.y, width: r.width, height: r.height });
               }}>${icon(tab.blocked ? 'shield-check' : 'shield', 14)}${tab.blocked || nothing}</button>
-            <button class="chip-btn" aria-label=${t('cmd_reader')} title=${t('cmd_reader')} @click=${() => shell.runCommand('view.reader')}>${icon('reader', 14)}</button>
-            <button class="chip-btn" aria-label=${t('cmd_bookmark')} title=${t('cmd_bookmark')} @click=${() => shell.runCommand('nav.bookmark')}>${icon('star', 14)}</button>`
+            ${tab.passwords.form || tab.passwords.logins
+              ? html`<button class="chip-btn ${tab.passwords.logins ? 'has' : ''}" aria-label=${t('pw_key_button')} title=${t('pw_key_button')}
+                  @click=${(e: MouseEvent) => {
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    void shell.showPasswordMenu(tab.id, { x: Math.round(r.left), y: Math.round(r.bottom + 4) });
+                  }}>${icon('key', 14)}</button>`
+              : nothing}
+            <button class="chip-btn wide" aria-label=${t('cmd_reader')} title=${t('cmd_reader')} @click=${() => shell.runCommand('view.reader')}>${icon('reader', 14)}</button>
+            <button class="chip-btn wide" aria-label=${t('cmd_bookmark')} title=${t('cmd_bookmark')} @click=${() => shell.runCommand('nav.bookmark')}>${icon('star', 14)}</button>`
           : nothing}
       </div>
       ${toast ? html`<div class="toast" role="status" aria-live="polite"><span>${toast.text}</span>
           ${toast.action ? html`<button @click=${() => shell.toastAction(toast.id)}>${toast.action.label}</button>` : nothing}
           <button aria-label=${t('action_close')} style="color:var(--vz-text-2)" @click=${() => shell.dismissToast(toast.id)}>${icon('x', 12)}</button></div>` : nothing}
       ${s.aiMode !== 'off' ? html`<button class="icon-btn ${s.panel === 'assistant' ? 'on' : ''}" aria-label=${t('cmd_ai_panel')} title=${t('cmd_ai_panel')} aria-pressed=${s.panel === 'assistant'} @click=${() => shell.runCommand('ai.panel')}>${icon('sparkle', 17)}</button>` : nothing}
-      ${s.features.VizullaNotes ? html`<button class="icon-btn ${s.panel === 'notes' ? 'on' : ''}" aria-label=${t('cmd_notes_panel')} title=${t('cmd_notes_panel')} aria-pressed=${s.panel === 'notes'} @click=${() => shell.runCommand('notes.panel')}>${icon('note', 17)}</button>` : nothing}
-      ${s.features.VizullaAgent ? html`<button class="icon-btn ${s.panel === 'agent' ? 'on' : ''}" aria-label=${t('agent_panel')} title=${t('agent_panel')} aria-pressed=${s.panel === 'agent'} @click=${() => shell.setPanel('agent')}>${icon('bot', 17)}</button>` : nothing}
-      <span class="sep"></span>
-      <button class="icon-btn" aria-label=${t('cmd_downloads')} title=${t('cmd_downloads')} @click=${() => shell.runCommand('page.downloads')}>${icon('download', 17)}</button>
+      ${s.features.VizullaNotes ? html`<button class="icon-btn wide ${s.panel === 'notes' ? 'on' : ''}" aria-label=${t('cmd_notes_panel')} title=${t('cmd_notes_panel')} aria-pressed=${s.panel === 'notes'} @click=${() => shell.runCommand('notes.panel')}>${icon('note', 17)}</button>` : nothing}
+      ${s.features.VizullaAgent ? html`<button class="icon-btn wide ${s.panel === 'agent' ? 'on' : ''}" aria-label=${t('agent_panel')} title=${t('agent_panel')} aria-pressed=${s.panel === 'agent'} @click=${() => shell.setPanel('agent')}>${icon('bot', 17)}</button>` : nothing}
+      ${s.update ? this.renderUpdate(s.update) : nothing}
+      <span class="sep wide"></span>
+      <button class="icon-btn wide" aria-label=${t('cmd_downloads')} title=${t('cmd_downloads')} @click=${() => shell.runCommand('page.downloads')}>${icon('download', 17)}</button>
+      ${s.platform.endsWith(':private')
+        ? nothing
+        : html`<button class="icon-btn me" aria-label=${t('profile_avatar', { name: s.profile.name })} title=${t('profile_avatar', { name: s.profile.name })}
+            @click=${(e: MouseEvent) => {
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              void shell.showProfileMenu({ x: Math.round(r.left), y: Math.round(r.bottom + 4) });
+            }}><span class="me-av" style="--c:${PROFILE_HEX[s.profile.color] ?? PROFILE_HEX.blue}">${(s.profile.name[0] ?? '?').toUpperCase()}</span></button>`}
       <button class="icon-btn" aria-label=${t('menu_more')} title=${t('menu_more')} @click=${(e: MouseEvent) => shell.showAppMenu({ x: e.clientX, y: e.clientY })}>${icon('more', 18)}</button>
       ${compact && !mac ? html`<span class="end" style="--controls:138px"></span>` : nothing}
     `;
+  }
+
+  private renderUpdate(u: UpdateInfo) {
+    const tip = {
+      available: t('upd_available', { version: u.version }),
+      downloading: t('upd_downloading', { version: u.version, percent: u.percent }),
+      ready: t('upd_ready', { version: u.version }),
+      installing: t('upd_installing'),
+      error: t('upd_failed', { error: u.error ?? '' }),
+    }[u.status];
+    const busy = u.status === 'downloading' || u.status === 'installing';
+    return html`<button class="upd ${u.status}" title=${tip} aria-label=${tip} ?disabled=${busy} style="--p:${u.percent}"
+      @click=${() => shell.runCommand('app.update')}>
+      ${u.status === 'downloading' ? html`<span class="ring" aria-hidden="true"></span><span>${u.percent}%</span>`
+        : u.status === 'ready' || u.status === 'installing' ? html`${icon('refresh', 15)}<span class="mid">${u.version}</span>`
+        : html`${icon(u.status === 'error' ? 'alert' : 'update', 16)}<span class="mid">${u.version}</span>`}
+    </button>`;
   }
 
   private open(e: Event): void {

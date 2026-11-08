@@ -150,12 +150,17 @@ test('accessibility: agent panel and Action Log have no WCAG AA violations', asy
   const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
   const axe = async (p: Page) => {
     await p.evaluate(AXE);
-    return p.evaluate(async () => ((await (window as any).axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } })).violations as any[]).map((v) => `${v.id}: ${v.nodes[0]?.target}`));
+    return p.evaluate(async () => {
+      await Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => undefined)));
+      return ((await (window as any).axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } })).violations as any[]).map((v) => `${v.id}: ${v.nodes[0]?.target}`);
+    });
   };
   h = await setup(AGENT_B);
   const chrome = await h.chrome();
   await inMain(h, (vz) => vz.focused().setPanel('agent'));
   await expect(chrome.locator('vz-agent')).toBeVisible();
+  // The panel slides in; audit once it has settled (as for the Action Log below).
+  await chrome.waitForTimeout(400);
   expect(await axe(chrome)).toEqual([]);
   await inMain(h, (vz) => vz.focused().loadUrl(null, 'vizulla://agent-log', { newTab: true }));
   const log = (await waitFor(async () => h.app.windows().find((w) => w.url().startsWith('vizulla://agent-log')), (p) => !!p))!;
