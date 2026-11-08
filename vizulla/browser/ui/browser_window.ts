@@ -500,7 +500,11 @@ export class BrowserWindowController extends EventEmitter {
     for (const v of this.attachedViews) if (!want.has(v)) this.detachView(v);
     for (const v of want) {
       if (!this.attachedViews.has(v)) {
-        this.win.contentView.addChildView(v, this.overlay.isOpen ? this.win.contentView.children.length - 1 : undefined);
+        // Tabs stack above the chrome view and below an open overlay. Never pass
+        // an explicit `undefined` index: Electron reads it as 0 (bottom of the stack),
+        // which hides the page under the chrome UI.
+        if (this.overlay.isOpen) this.win.contentView.addChildView(v, this.win.contentView.children.length - 1);
+        else this.win.contentView.addChildView(v);
         this.attachedViews.add(v);
       }
     }

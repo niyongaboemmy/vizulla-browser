@@ -39,6 +39,29 @@ test('navigates, records history, and shows security state', async () => {
   expect(hist).toContain(`${h.base}/`);
 });
 
+test('the page view stacks above the chrome view and fills the content area', async () => {
+  h = await launch();
+  await h.chrome();
+  // Switching layouts and navigating to the web both swap or re-add tab views.
+  for (const layout of ['vertical', 'horizontal']) {
+    await inMain(h, (vz, l) => vz.profile.prefs.set('tabs.layout', l), layout);
+    await inMain(h, (vz, url) => vz.focused().loadUrl(vz.focused().activeTab().id, url), `${h.base}/?${layout}`);
+    await waitFor(() => activeTab(h), (t) => t.title === 'Vizulla test home');
+    const stack = await waitFor(
+      () => inMain(h, (vz) => {
+        const w = vz.focused();
+        const kids = w.win.contentView.children;
+        const page = kids.findIndex((c: Electron.WebContentsView) => c.webContents === w.activeTab().wc);
+        const chrome = kids.findIndex((c: Electron.WebContentsView) => c.webContents.getURL().startsWith('vizulla://chrome'));
+        return { page, chrome, bounds: page >= 0 ? kids[page].getBounds() : null };
+      }),
+      (s) => s.page >= 0 && s.bounds.height > 200,
+    );
+    expect(stack.page, layout).toBeGreaterThan(stack.chrome);
+    expect(stack.bounds.width, layout).toBeGreaterThan(400);
+  }
+});
+
 test('Shields blocks ad scripts and hides ad elements (SHD-01/02)', async () => {
   h = await launch();
   await h.chrome();
