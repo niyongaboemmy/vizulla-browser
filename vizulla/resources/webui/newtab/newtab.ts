@@ -32,48 +32,46 @@ class VzNewTab extends VzPage<Data> {
     base,
     pageStyles,
     css`
-      :host { display: grid; place-items: start center; min-height: 100vh; background:
-        radial-gradient(900px 500px at 15% -10%, color-mix(in srgb, var(--vz-accent) 14%, transparent), transparent 70%),
-        radial-gradient(800px 500px at 100% 0%, color-mix(in srgb, var(--vz-accent) 8%, transparent), transparent 70%), var(--vz-toolbar); }
-      .wrap { width: min(640px, calc(100vw - 48px)); padding-top: 16vh; display: flex; flex-direction: column; align-items: center; }
-      .glyph { display: grid; margin-bottom: 28px; animation: float 5s ease-in-out infinite; }
-      @keyframes float { 50% { transform: translateY(-6px) rotate(3deg); } }
-      .bar { width: 100%; display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 10px 0 20px; border-radius: 999px; cursor: text;
-        background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border);
-        color: var(--vz-text-3); font-size: 16px; transition: transform var(--vz-dur) var(--vz-ease), box-shadow var(--vz-dur); }
-      .bar:hover { transform: translateY(-1px); }
-      .bar:focus-visible { outline: 2px solid var(--vz-focus); }
+      :host { display: grid; place-items: start center; min-height: 100vh; background: var(--vz-toolbar); }
+      .wrap { width: min(584px, calc(100vw - 48px)); padding-top: 18vh; display: flex; flex-direction: column; align-items: center; }
+      .glyph { display: grid; margin-bottom: 30px; }
+      /* Chrome-style search pill: filled, no border; white with an accent ring on hover/focus. */
+      .bar { width: 100%; display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 8px 0 18px; border-radius: 999px; cursor: text;
+        background: var(--vz-omnibox); color: var(--vz-text-3); font-size: 15px; border: 1px solid transparent;
+        transition: background var(--vz-dur), border-color var(--vz-dur); }
+      .bar:hover { background: var(--vz-omnibox-hover); }
+      .bar:focus-visible { outline: none; background: var(--vz-toolbar); border-color: var(--vz-accent); }
       .bar .grow { flex: 1; }
-      .bar .mic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--vz-accent); background: var(--vz-accent-soft); }
-      .tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 36px; width: 100%; }
-      .tile { all: unset; box-sizing: border-box; width: 96px; height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-        border-radius: 18px; cursor: pointer; transition: background var(--vz-dur), transform var(--vz-dur) var(--vz-ease); position: relative; }
-      .tile:hover { background: var(--vz-surface-hover); transform: translateY(-3px); }
-      .tile:active { transform: scale(.96); }
-      .tiles > * { animation: vz-rise 380ms var(--vz-ease) both; }
-      ${unsafeCSS(Array.from({ length: 16 }, (_, i) => `.tiles > :nth-child(${i + 1}) { animation-delay: ${120 + i * 35}ms; }`).join('\n'))}
+      .bar .mic { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--vz-accent); transition: background var(--vz-dur); }
+      .bar:hover .mic { background: var(--vz-accent-soft); }
+      .tiles { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 32px; max-width: 592px; }
+      .tile { all: unset; box-sizing: border-box; width: 112px; height: 112px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+        border-radius: 14px; cursor: pointer; transition: background var(--vz-dur); position: relative; }
+      .tile:hover { background: var(--vz-surface-hover); }
+      .tile:active { background: var(--vz-surface-active); }
+      .tiles > * { animation: vz-rise 320ms var(--vz-ease) both; }
+      ${unsafeCSS(Array.from({ length: 16 }, (_, i) => `.tiles > :nth-child(${i + 1}) { animation-delay: ${80 + i * 30}ms; }`).join('\n'))}
       .tile:focus-visible { outline: 2px solid var(--vz-focus); }
-      .bubble { position: relative; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 20px; color: #fff;
-        background: hsl(var(--h) 70% 52%); }
-      .bubble.fav { background: var(--vz-glass-strong); box-shadow: 0 0 0 1px var(--vz-border); }
-      .bubble img { width: 26px; height: 26px; }
-      .label { max-width: 88px; font-size: 12px; color: var(--vz-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .badge { position: absolute; top: 12px; right: 18px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+      .bubble { position: relative; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--vz-omnibox); }
+      .letter { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 14px; color: #fff; background: hsl(var(--h) 62% 46%); }
+      .bubble img { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; border-radius: 4px; background: var(--vz-omnibox); }
+      .label { max-width: 96px; font-size: 13px; color: var(--vz-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .badge { position: absolute; top: 14px; right: 26px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
         background: var(--vz-toolbar); color: var(--vz-text-2); box-shadow: 0 0 0 1px var(--vz-border); }
-      .actions { display: flex; gap: 10px; margin-top: 28px; }
-      .act { width: 44px; height: 44px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2);
-        background: var(--vz-glass-strong); box-shadow: 0 0 0 1px var(--vz-border); transition: all var(--vz-dur) var(--vz-ease); }
-      .act:hover { color: var(--vz-accent); transform: translateY(-2px); box-shadow: 0 0 0 1px var(--vz-accent); }
-      .space { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--vz-accent); background: var(--vz-accent-soft); }
+      /* Quiet corner actions, like Chrome's "Customize" button. */
+      .actions { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--vz-omnibox); }
+      .act { width: 36px; height: 36px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2); background: transparent;
+        transition: background var(--vz-dur), color var(--vz-dur); }
+      .act:hover { color: var(--vz-accent); background: var(--vz-toolbar); }
+      @media (max-width: 520px) { .tile { width: 96px; } .actions { right: 50%; transform: translateX(50%); } }
     `,
   ];
 
   private tile(url: string, title: string, fav: string | null, onClick: () => void, badge?: string) {
     const host = hostOf(url);
     return html`<button class="tile" title=${`${title}\n${host}`} aria-label=${title || host} @click=${onClick}>
-      <span class="bubble" style="--h:${hueOf(host)}">${/^\d/.test(host) ? '#' : host.slice(0, 1).toUpperCase()}${fav
-        ? html`<img src=${fav} alt="" style="position:absolute;inset:0;margin:auto;width:52px;height:52px;padding:13px;box-sizing:border-box;border-radius:50%;background:var(--vz-glass-strong)"
-            @error=${(e: Event) => (e.target as HTMLImageElement).remove()} />`
+      <span class="bubble"><span class="letter" style="--h:${hueOf(host)}">${/^\d/.test(host) ? '#' : host.slice(0, 1).toUpperCase()}</span>${fav
+        ? html`<img src=${fav} alt="" @error=${(e: Event) => (e.target as HTMLImageElement).remove()} />`
         : nothing}</span>
       <span class="label">${title || host}</span>${badge ? html`<span class="badge">${icon(badge, 11)}</span>` : nothing}</button>`;
   }
@@ -85,11 +83,10 @@ class VzNewTab extends VzPage<Data> {
     const seen = new Set<string>();
     const recent = d.recent.filter((r) => !seen.has(hostOf(r.url)) && seen.add(hostOf(r.url)));
     return html`<div class="wrap">
-      <div class="glyph rise">${logo(64)}</div>
-      ${d.space ? html`<span class="space">${icon(d.space.icon, 12)} ${d.space.name}</span>` : nothing}
+      <div class="glyph rise">${logo(72)}</div>
       <div class="bar rise" style="--i:2" role="button" tabindex="0"
         @click=${() => this.invoke('openCommandBar')} @keydown=${(e: KeyboardEvent) => e.key !== 'Tab' && this.invoke('openCommandBar')}>
-        ${icon('search', 20)}<span class="grow"><span class="sr-only">${t('cb_placeholder')} · </span>${d.engine}</span><span class="kbd" aria-hidden="true">${mac ? '⌘K' : 'Ctrl K'}</span>
+        ${icon('search', 18)}<span class="grow"><span class="sr-only">${t('cb_placeholder')} · </span>${d.engine}</span><span class="kbd" aria-hidden="true">${mac ? '⌘K' : 'Ctrl K'}</span>
         ${d.aiMode !== 'off' ? html`<span class="mic" aria-hidden="true">${icon('sparkle', 16)}</span>` : nothing}
       </div>
       <div class="tiles" role="list" aria-label=${t('ntp_continue')}>
@@ -98,12 +95,12 @@ class VzNewTab extends VzPage<Data> {
         ${recent.slice(0, Math.max(0, 8 - d.pins.length - d.archived.length)).map((r) => html`<div role="listitem">${this.tile(r.url, r.title, r.favicon, () => this.invoke('open', { url: r.url }))}</div>`)}
       </div>
       <div class="actions">
-        <button class="act" aria-label=${t('ntp_tip_space')} title=${t('ntp_tip_space')} @click=${() => this.invoke('command', { id: 'space.new' })}>${icon('layers', 18)}</button>
-        ${d.aiMode !== 'off' ? html`<button class="act" aria-label=${t('ntp_tip_ai')} title=${t('ntp_tip_ai')} @click=${() => this.invoke('command', { id: 'ai.panel' })}>${icon('sparkle', 18)}</button>` : nothing}
-        <button class="act" aria-label=${t('ntp_tip_import')} title=${t('ntp_tip_import')} @click=${() => this.invoke('command', { id: 'page.import' })}>${icon('download', 18)}</button>
-        <button class="act" aria-label=${t('cmd_privacy_dashboard')} title=${t('cmd_privacy_dashboard')} @click=${() => this.invoke('command', { id: 'page.privacy' })}>${icon('shield', 18)}</button>
-        <button class="act" aria-label=${t('cmd_settings')} title=${t('cmd_settings')} @click=${() => this.invoke('command', { id: 'page.settings' })}>${icon('settings', 18)}</button>
-        ${!d.onboarded ? html`<button class="act" aria-label=${t('ntp_tip_setup')} title=${t('ntp_tip_setup')} @click=${() => this.invoke('open', { url: 'vizulla://onboarding' })}>${icon('zap', 18)}</button>` : nothing}
+        <button class="act" aria-label=${t('ntp_tip_space')} title=${t('ntp_tip_space')} @click=${() => this.invoke('command', { id: 'space.new' })}>${icon('layers', 17)}</button>
+        ${d.aiMode !== 'off' ? html`<button class="act" aria-label=${t('ntp_tip_ai')} title=${t('ntp_tip_ai')} @click=${() => this.invoke('command', { id: 'ai.panel' })}>${icon('sparkle', 17)}</button>` : nothing}
+        <button class="act" aria-label=${t('ntp_tip_import')} title=${t('ntp_tip_import')} @click=${() => this.invoke('command', { id: 'page.import' })}>${icon('download', 17)}</button>
+        <button class="act" aria-label=${t('cmd_privacy_dashboard')} title=${t('cmd_privacy_dashboard')} @click=${() => this.invoke('command', { id: 'page.privacy' })}>${icon('shield', 17)}</button>
+        <button class="act" aria-label=${t('cmd_settings')} title=${t('cmd_settings')} @click=${() => this.invoke('command', { id: 'page.settings' })}>${icon('settings', 17)}</button>
+        ${!d.onboarded ? html`<button class="act" aria-label=${t('ntp_tip_setup')} title=${t('ntp_tip_setup')} @click=${() => this.invoke('open', { url: 'vizulla://onboarding' })}>${icon('zap', 17)}</button>` : nothing}
       </div>
     </div>`;
   }

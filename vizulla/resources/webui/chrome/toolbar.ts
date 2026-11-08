@@ -18,17 +18,17 @@ export class VzToolbar extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 10px; background: var(--vz-toolbar-bg, var(--vz-toolbar)); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 1px 0 var(--vz-border); position: relative; z-index: 1; }
+      :host { display: flex; align-items: center; gap: 2px; height: 46px; color: var(--vz-text-2); padding: 0 10px; background: var(--vz-toolbar-bg, var(--vz-toolbar)); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 1px 0 var(--vz-border); position: relative; z-index: 1; }
       :host([mode='compact']) { -webkit-app-region: drag; }
       :host > * { -webkit-app-region: no-drag; }
       .icon-btn { width: 34px; height: 34px; border-radius: 50%; }
-      .omni { flex: 1; display: flex; align-items: center; gap: 6px; height: 36px; margin: 0 6px; padding: 0 6px 0 4px; min-width: 0;
+      .omni { flex: 1; display: flex; align-items: center; gap: 6px; height: 36px; margin: 0 8px; padding: 0 6px 0 4px; min-width: 0;
         border-radius: 999px; background: var(--vz-omnibox); transition: background var(--vz-dur), box-shadow var(--vz-dur); }
       .omni:hover { background: var(--vz-omnibox-hover); }
       .omni:focus-within { background: var(--vz-toolbar); box-shadow: 0 0 0 2px var(--vz-accent); }
       .sec { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--vz-text-2); flex: none; }
       .sec.insecure, .sec.dangerous { color: var(--vz-danger); background: color-mix(in srgb, var(--vz-danger) 12%, transparent); width: auto; padding: 0 8px; border-radius: 999px; gap: 4px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; }
-      .addr { all: unset; flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; cursor: text; white-space: nowrap; overflow: hidden; font-size: 14px; }
+      .addr { all: unset; flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; cursor: text; white-space: nowrap; overflow: hidden; font-size: 14px; letter-spacing: .005em; }
       .addr:focus-visible { outline: none; }
       .host { color: var(--vz-text); }
       .path { color: var(--vz-text-3); overflow: hidden; text-overflow: ellipsis; }
@@ -39,7 +39,7 @@ export class VzToolbar extends LitElement {
       .chip-btn.has { color: var(--vz-accent); }
       .lead { width: var(--traffic, 0); flex: none; }
       .end { width: var(--controls, 0); flex: none; }
-      .sep { width: 1px; height: 20px; background: var(--vz-border); margin: 0 4px; }
+      .sep { width: 1px; height: 18px; background: var(--vz-border); margin: 0 6px; }
       .toast { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; height: 30px; padding: 0 4px 0 12px; border-radius: 999px; font-size: 12px;
         background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--vz-glass-shadow); animation: pop 220ms var(--vz-ease); }
       .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -96,7 +96,7 @@ export class VzToolbar extends LitElement {
       <button class="icon-btn" aria-label=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} title=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} data-kbd=${tab?.loading ? 'Esc' : mac ? '⌘R' : 'Ctrl+R'}
         @click=${() => tab && (tab.loading ? shell.stop(tab.id) : shell.reload(tab.id))}>${icon(tab?.loading ? 'x' : 'refresh', 16)}</button>
       <div class="omni">
-        <span class="sec ${sec}" title=${t(`security_${sec}` as never)}>${icon(securityIcon(sec), 14, t(`security_${sec}` as never))}${sec === 'insecure' || sec === 'dangerous' ? html`<span>${t(`security_${sec}_short` as never)}</span>` : nothing}</span>
+        <span class="sec ${sec}" title=${t(`security_${sec}` as never)}>${icon(host ? securityIcon(sec) : 'search', 15, t(`security_${sec}` as never))}${sec === 'insecure' || sec === 'dangerous' ? html`<span>${t(`security_${sec}_short` as never)}</span>` : nothing}</span>
         <button class="addr" title=${t('cb_address_label')} data-kbd=${mac ? '⌘L' : 'Ctrl+L'} @click=${(e: MouseEvent) => this.open(e)}>
           ${host ? html`<span class="host">${host}</span><span class="path">${path}</span>` : html`<span class="ph">${t('cb_placeholder')}</span>`}
         </button>
@@ -133,7 +133,7 @@ export class VzToolbar extends LitElement {
               const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
               void shell.showProfileMenu({ x: Math.round(r.left), y: Math.round(r.bottom + 4) });
             }}><span class="me-av" style="--c:${PROFILE_HEX[s.profile.color] ?? PROFILE_HEX.blue}">${(s.profile.name[0] ?? '?').toUpperCase()}</span></button>`}
-      <button class="icon-btn" aria-label=${t('menu_more')} title=${t('menu_more')} @click=${(e: MouseEvent) => shell.showAppMenu({ x: e.clientX, y: e.clientY })}>${icon('more', 18)}</button>
+      <button class="icon-btn" aria-label=${t('menu_more')} title=${t('menu_more')} @click=${(e: MouseEvent) => shell.showAppMenu({ x: e.clientX, y: e.clientY })}>${icon('more-v', 18)}</button>
       ${compact && !mac ? html`<span class="end" style="--controls:138px"></span>` : nothing}
     `;
   }

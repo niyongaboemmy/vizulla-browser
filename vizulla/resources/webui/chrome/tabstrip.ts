@@ -30,7 +30,7 @@ export class VzTabstrip extends LitElement {
       .lead { padding-left: var(--traffic, 0); padding-right: 6px; }
       .dot { width: 24px; height: 24px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .dot:hover { background: var(--vz-tab-hover); color: var(--c); }
-      .dot.on { background: var(--c); color: #fff; }
+      .dot.on { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
       .dot:active { transform: scale(0.92); }
       /* Tabs shrink to icons, then the strip scrolls (padding leaves room for the active tab's feet). */
       .tabs { display: flex; flex: 0 1 auto; min-width: 0; height: 34px; align-items: flex-end; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;

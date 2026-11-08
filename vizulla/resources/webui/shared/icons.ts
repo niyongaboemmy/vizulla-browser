@@ -20,6 +20,7 @@ const P: Record<string, string> = {
   sidebar: 'M4 5h16v14H4zM9 5v14',
   'panel-right': 'M4 5h16v14H4zM15 5v14',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  'more-v': 'M12 5h.01M12 12h.01M12 19h.01',
   pin: 'M15 4l5 5-3 1-3 3 1 4-2 2-4-4-5 5M9 11l4 4',
   volume: 'M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
   'volume-x': 'M4 9v6h4l5 4V5L8 9H4zM17 9l5 5M22 9l-5 5',

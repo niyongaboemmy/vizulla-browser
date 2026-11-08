@@ -24,11 +24,11 @@ export const PROFILE_HEX: Record<string, string> = {
 
 export const THEMES = {
   light: {
-    '--vz-frame': '#e9eef6',
+    '--vz-frame': '#e7ecf3',
     '--vz-toolbar': '#ffffff',
-    '--vz-omnibox': '#f0f4fa',
-    '--vz-omnibox-hover': '#e6ecf5',
-    '--vz-tab-hover': 'rgba(255,255,255,0.55)',
+    '--vz-omnibox': '#edf1f7',
+    '--vz-omnibox-hover': '#e4e9f1',
+    '--vz-tab-hover': 'rgba(255,255,255,0.6)',
     '--vz-glass': 'rgba(255,255,255,0.68)',
     '--vz-glass-strong': 'rgba(255,255,255,0.82)',
     '--vz-glass-border': 'rgba(37,99,235,0.14)',
