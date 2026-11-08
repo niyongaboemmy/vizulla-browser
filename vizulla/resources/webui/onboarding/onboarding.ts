@@ -68,8 +68,8 @@ class VzOnboarding extends VzPage<Data> {
         }))}
         ${this.imported ? html`<p style="color:var(--vz-ok)">${icon('check', 14)} ${this.imported}</p>` : nothing}</div>` : nothing}
       ${s === 'layout' ? html`<h1>${t('ob_layout')}</h1><p class="lead">${t('ob_layout_body')}</p><div class="opts two">
-        ${opt(d.prefs.layout === 'vertical', 'sidebar', t('layout_vertical'), t('ob_layout_vertical'), () => this.set('tabs.layout', 'vertical'))}
-        ${opt(d.prefs.layout === 'horizontal', 'columns', t('layout_horizontal'), t('ob_layout_horizontal'), () => this.set('tabs.layout', 'horizontal'))}</div>` : nothing}
+        ${opt(d.prefs.layout === 'horizontal', 'columns', t('layout_horizontal'), t('ob_layout_horizontal'), () => this.set('tabs.layout', 'horizontal'))}
+        ${opt(d.prefs.layout === 'vertical', 'sidebar', t('layout_vertical'), t('ob_layout_vertical'), () => this.set('tabs.layout', 'vertical'))}</div>` : nothing}
       ${s === 'ai' ? html`<h1>${t('ob_ai')}</h1><p class="lead">${t('ob_ai_body')}</p><div class="opts">
         ${opt(d.prefs.aiMode === 'local', 'cpu', t('ai_mode_local'), t('ai_mode_local_desc'), () => this.set('ai.mode', 'local'))}
         ${opt(d.prefs.aiMode === 'cloud', 'cloud', t('ai_mode_cloud'), t('ai_mode_cloud_desc'), () => this.set('ai.mode', 'cloud'))}

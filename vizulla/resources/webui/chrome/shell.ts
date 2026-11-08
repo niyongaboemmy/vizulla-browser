@@ -12,6 +12,7 @@ import { t } from '@vz/common/i18n';
 import type { TabInfo, WindowState } from '@vz/common/types';
 import './sidebar';
 import './tabstrip';
+import './tab_rail';
 import './toolbar';
 import './panels';
 import './assistant_panel';
@@ -212,6 +213,8 @@ export class VzShell extends LitElement {
     const tiny = this.vw < TINY;
     // Small windows: the sidebar narrows, then hides (tabs stay one click away in tab search).
     const showSidebar = vertical && !s.sidebarCollapsed && !s.fullscreen && !tiny;
+    // Collapsed, the sidebar becomes a slim rail of tab icons (as in Chrome), never nothing.
+    const showRail = vertical && s.sidebarCollapsed && !s.fullscreen && !tiny;
     const sidebarWidth = narrow ? Math.min(s.sidebarWidth, 200) : s.sidebarWidth;
     const panel = s.panel && !s.classic;
     // A side panel never takes more than half the window from the page.
@@ -222,11 +225,13 @@ export class VzShell extends LitElement {
         ? html`<div style="display:flex"><vz-sidebar .state=${s} style="width:${sidebarWidth}px"></vz-sidebar>
             <div class="resize ${this.resizing === 'sidebar' ? 'active' : ''}" role="separator" aria-orientation="vertical" aria-label=${t('a11y_resize_sidebar')}
               @pointerdown=${(e: PointerEvent) => this.startResize('sidebar', e)}></div></div>`
-        : vertical
-          ? html`<div></div>`
+        : showRail
+          ? html`<vz-tab-rail .state=${s}></vz-tab-rail>`
+          : vertical
+            ? html`<div></div>`
           : nothing}
       <div class="main">
-        ${vertical && !showSidebar ? html`<vz-toolbar .state=${s} mode="compact"></vz-toolbar>` : nothing}
+        ${vertical && !showSidebar ? html`<vz-toolbar .state=${s} mode="compact" ?rail=${showRail}></vz-toolbar>` : nothing}
         ${s.agent ? this.renderAgentBar() : nothing}
         ${this.findOpen ? this.renderFind() : nothing}
         <div class="frame-wrap">

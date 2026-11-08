@@ -11,9 +11,11 @@ import { shell } from './shell';
 import { securityIcon } from './common';
 
 export class VzToolbar extends LitElement {
-  static override properties = { state: { attribute: false }, mode: { type: String } };
+  static override properties = { state: { attribute: false }, mode: { type: String }, rail: { type: Boolean } };
   state!: WindowState;
   mode: 'full' | 'compact' = 'full';
+  /** The collapsed tab rail sits to the left (it holds the sidebar button and clears the traffic lights). */
+  rail = false;
 
   static override styles = [
     base,
@@ -88,13 +90,14 @@ export class VzToolbar extends LitElement {
     const [host, path] = splitUrl(tab?.displayUrl ?? '');
     const toast = s.toasts.at(-1);
     return html`
-      ${compact && mac && !s.fullscreen ? html`<span class="lead" style="--traffic:70px"></span>` : nothing}
-      ${compact ? html`<button class="icon-btn sidebar-btn" aria-label=${t('cmd_toggle_sidebar')} title=${t('cmd_toggle_sidebar')} @click=${() => shell.runCommand('view.toggleSidebar')}>${icon('sidebar', 17)}</button>
+      ${compact && mac && !s.fullscreen && !this.rail ? html`<span class="lead" style="--traffic:70px"></span>` : nothing}
+      ${compact && !this.rail ? html`<button class="icon-btn sidebar-btn" aria-label=${t('cmd_toggle_sidebar')} title=${t('cmd_toggle_sidebar')} @click=${() => shell.runCommand('view.toggleSidebar')}>${icon('sidebar', 17)}</button>
         <button class="icon-btn tabs-btn" aria-label=${t('cmd_tab_search')} title=${t('cmd_tab_search')} @click=${() => shell.runCommand('tab.search')}>${icon('layers', 17)}</button>` : nothing}
       <button class="icon-btn" aria-label=${t('cmd_nav_back')} title=${t('cmd_nav_back')} data-kbd=${mac ? '⌘[' : 'Alt+←'} ?disabled=${!tab?.canGoBack} @click=${() => tab && shell.goBack(tab.id)}>${icon('arrow-left', 17)}</button>
       <button class="icon-btn mid" aria-label=${t('cmd_nav_forward')} title=${t('cmd_nav_forward')} data-kbd=${mac ? '⌘]' : 'Alt+→'} ?disabled=${!tab?.canGoForward} @click=${() => tab && shell.goForward(tab.id)}>${icon('arrow-right', 17)}</button>
       <button class="icon-btn" aria-label=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} title=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} data-kbd=${tab?.loading ? 'Esc' : mac ? '⌘R' : 'Ctrl+R'}
         @click=${() => tab && (tab.loading ? shell.stop(tab.id) : shell.reload(tab.id))}>${icon(tab?.loading ? 'x' : 'refresh', 16)}</button>
+      ${compact && !this.rail ? html`<button class="icon-btn" aria-label=${t('cmd_tab_new')} title=${t('cmd_tab_new')} data-kbd=${mac ? '⌘T' : 'Ctrl+T'} @click=${() => shell.newTab()}>${icon('plus', 18)}</button>` : nothing}
       <div class="omni">
         <span class="sec ${sec}" title=${t(`security_${sec}` as never)}>${icon(host ? securityIcon(sec) : 'search', 15, t(`security_${sec}` as never))}${sec === 'insecure' || sec === 'dangerous' ? html`<span>${t(`security_${sec}_short` as never)}</span>` : nothing}</span>
         <button class="addr" title=${t('cb_address_label')} data-kbd=${mac ? '⌘L' : 'Ctrl+L'} @click=${(e: MouseEvent) => this.open(e)}>

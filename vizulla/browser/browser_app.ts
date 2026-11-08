@@ -283,7 +283,7 @@ export class BrowserApp {
       else w.createTab({ url, activate: true });
     };
     const c = this.commandHandlers;
-    c.set('tab.new', (w) => this.openCommandBar(w, 'address', undefined, true));
+    c.set('tab.new', (w) => this.openNewTab(w));
     c.set('tab.close', (w) => {
       const x = tab(w);
       if (x) w.closeTab(x.id);
@@ -447,6 +447,12 @@ export class BrowserApp {
     return (spaces.find((s) => s.name.toLowerCase() === q) ?? spaces.find((s) => s.name.toLowerCase().includes(q)))?.id ?? null;
   }
 
+  /** Like Chrome: "+" and ⌘T open a New Tab page right away, with the address bar ready to type. */
+  openNewTab(w: BrowserWindowController): void {
+    w.loadUrl(null, 'vizulla://newtab/', { newTab: true });
+    this.openCommandBar(w, 'address');
+  }
+
   openCommandBar(w: BrowserWindowController, mode: 'palette' | 'address' | 'tab-search' | 'ask', anchor?: { x: number; y: number; width: number; height: number }, newTab = false): void {
     const tab = w.activeTab();
     const initial = mode === 'address' && !newTab && tab && !tab.url.startsWith('vizulla://newtab') ? tab.url : mode === 'palette' ? '' : '';
@@ -468,7 +474,7 @@ export class BrowserApp {
         newTab: (ctx, url) => {
           const w = win(ctx);
           if (url) w.loadUrl(null, url, { newTab: true });
-          else this.openCommandBar(w, 'address', undefined, true);
+          else this.openNewTab(w);
         },
         closeTab: (ctx, id) => win(ctx).closeTab(id),
         activateTab: (ctx, id) => win(ctx).activateTab(id),

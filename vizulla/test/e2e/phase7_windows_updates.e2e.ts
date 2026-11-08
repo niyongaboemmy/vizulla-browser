@@ -216,3 +216,37 @@ test('tooltips: a glass bubble replaces the native title, with a keycap, clear o
   await expect(chrome.locator('#vz-tooltip.on')).toHaveCount(0);
   await chrome.mouse.up();
 });
+
+test('vertical tabs collapse to a rail of tab icons with a new-tab button (never hidden)', async () => {
+  h = await launch();
+  const chrome = await h.chrome();
+  await inMain(h, (vz) => {
+    vz.profile.prefs.set('tabs.layout', 'vertical');
+    vz.profile.prefs.set('tabs.sidebarCollapsed', true);
+    vz.focused().win.setBounds({ width: 1200, height: 800 });
+  });
+  const rail = chrome.locator('vz-tab-rail');
+  await expect(rail).toBeVisible();
+  await expect(rail.getByRole('tab')).toHaveCount(1);
+  await rail.getByRole('button', { name: /new tab/i }).click();
+  await expect(rail.getByRole('tab')).toHaveCount(2);
+  await rail.getByRole('tab').first().click();
+  const first = await inMain(h, (vz) => vz.focused().model.all()[0].id);
+  await waitFor(() => inMain(h, (vz) => vz.focused().activeTab().id), (id) => id === first);
+  // Expanding brings the full sidebar back.
+  await rail.getByRole('button', { name: /sidebar/i }).click();
+  await expect(chrome.locator('vz-sidebar')).toBeVisible();
+  await expect(rail).toHaveCount(0);
+});
+
+test('"+" opens a New Tab page right away, like Chrome', async () => {
+  h = await launch();
+  const chrome = await h.chrome();
+  const add = chrome.locator('vz-tabstrip').getByRole('button', { name: 'New tab' });
+  await add.click();
+  await inMain(h, (vz) => vz.focused().overlay.close());
+  await add.click();
+  const tabs = await waitFor(() => inMain(h, (vz) => vz.focused().state().tabs.map((t: { url: string }) => t.url)), (u) => u.length === 3);
+  expect(tabs.every((u: string) => u.startsWith('vizulla://newtab'))).toBe(true);
+  await expect(chrome.locator('vz-tabstrip').getByRole('tab')).toHaveCount(3);
+});
