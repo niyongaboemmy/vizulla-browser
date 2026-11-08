@@ -21,13 +21,13 @@ export class VzPanels extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; flex-direction: column; height: 100vh; padding: 8px 8px 8px 0; min-width: 0; }
-      .card { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--vz-bg-elev); border-radius: 10px; box-shadow: var(--vz-shadow); outline: 1px solid var(--vz-border); overflow: hidden; }
-      .tabs { display: flex; align-items: center; gap: 2px; padding: 6px 6px 0; -webkit-app-region: drag; }
+      :host { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+      .card { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--vz-toolbar); overflow: hidden; }
+      .tabs { display: flex; align-items: center; gap: 2px; padding: 8px 8px 4px; }
       .tabs > * { -webkit-app-region: no-drag; }
-      .tabs .tab { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; color: var(--vz-text-2); font-weight: 600; font-size: var(--vz-text-s); }
+      .tabs .tab { display: inline-grid; place-items: center; width: 34px; height: 32px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; color: var(--vz-text-2); transition: background var(--vz-dur), color var(--vz-dur); }
       .tabs .tab:hover { background: var(--vz-surface-hover); }
-      .tabs .tab[aria-selected='true'] { color: var(--vz-text); background: var(--vz-surface-2); }
+      .tabs .tab[aria-selected='true'] { color: var(--vz-accent); background: var(--vz-accent-soft); }
       .tabs .spacer { flex: 1; }
       .body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
       .body > * { flex: 1; min-height: 0; }
@@ -46,7 +46,7 @@ export class VzPanels extends LitElement {
     if (el) (el as unknown as { state: WindowState }).state = this.state;
     return html`<div class="card">
       <div class="tabs"><div role="tablist" style="display:flex;gap:2px">
-        ${kinds.map((k) => html`<button class="tab" role="tab" aria-selected=${k === current} @click=${() => shell.setPanel(k)}>${icon(PANEL_TAGS[k]!.icon, 14)} ${PANEL_TAGS[k]!.title()}</button>`)}</div>
+        ${kinds.map((k) => html`<button class="tab" role="tab" aria-selected=${k === current} aria-label=${PANEL_TAGS[k]!.title()} title=${PANEL_TAGS[k]!.title()} @click=${() => shell.setPanel(k)}>${icon(PANEL_TAGS[k]!.icon, 16)}</button>`)}</div>
         <span class="spacer"></span>
         <button class="icon-btn" aria-label=${t('action_close')} @click=${() => shell.setPanel(undefined)}>${icon('x', 15)}</button>
       </div>

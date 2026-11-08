@@ -48,7 +48,7 @@ test('Spaces: switching hides tabs, keeps each Space\'s active tab, cycling stay
   }, h.base);
   expect(r).toMatchObject({ visibleHome: 2, stayed: true, workActive: true, spaces: 2 });
   expect(r.homeActive).toContain('/article');
-  await expect(chrome.locator('vz-sidebar')).toContainText('Work');
+  await expect(chrome.locator('vz-tabstrip button[aria-label="Work"]')).toBeVisible();
   await chrome.screenshot({ path: 'test-results/phase2-spaces.png' });
 });
 

@@ -36,16 +36,17 @@ export class VzOverlay extends LitElement {
     base,
     css`
       :host { position: fixed; inset: 0; display: block; }
-      .backdrop { position: absolute; inset: 0; background: var(--vz-backdrop); animation: fade 140ms var(--vz-ease); }
+      .backdrop { position: absolute; inset: 0; background: color-mix(in srgb, var(--vz-backdrop) 45%, transparent); animation: fade 140ms var(--vz-ease); }
       .backdrop.clear { background: transparent; }
       @keyframes fade { from { opacity: 0; } }
       @keyframes rise { from { opacity: 0; transform: translateY(-6px) scale(0.985); } }
 
       .cb { position: absolute; width: min(680px, calc(100vw - 32px)); left: 50%; top: 14vh; transform: translateX(-50%);
-        background: var(--vz-bg-elev); border-radius: var(--vz-radius-xl); box-shadow: var(--vz-shadow-pop); border: 1px solid var(--vz-border);
+        background: var(--vz-glass); backdrop-filter: blur(28px) saturate(180%); border-radius: 22px; box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border);
         overflow: hidden; animation: rise 160ms var(--vz-ease); display: flex; flex-direction: column; max-height: 72vh; }
+      .cb.anchored { border-radius: 20px; }
       .cb.anchored { transform: none; }
-      .cb .cb-field { display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 58px; border-bottom: 1px solid var(--vz-border); }
+      .cb .cb-field { display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 54px; border-bottom: 1px solid var(--vz-border); }
       .cb .cb-field .lead { color: var(--vz-text-3); }
       .cb input { flex: 1; border: 0; outline: none; box-shadow: none; background: transparent; font-size: 17px; padding: 0; height: 100%; color: var(--vz-text); }
       .cb input:focus { box-shadow: none; }
@@ -57,8 +58,8 @@ export class VzOverlay extends LitElement {
       .rows { overflow-y: auto; padding: 6px; }
       .sec { font-size: var(--vz-text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--vz-text-3); padding: 10px 10px 4px; }
       .row { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 10px; border-radius: var(--vz-radius); cursor: pointer; }
-      .row.sel { background: var(--vz-accent-soft); }
-      .row .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--vz-surface-2); color: var(--vz-text-2); flex: none; }
+      .row.sel { background: color-mix(in srgb, var(--vz-accent) 12%, transparent); }
+      .row .ic { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--vz-glass-strong); box-shadow: 0 0 0 1px var(--vz-border); color: var(--vz-text-2); flex: none; transition: all var(--vz-dur); }
       .row.sel .ic { background: var(--vz-accent); color: var(--vz-on-accent); }
       .row .ic img { width: 16px; height: 16px; border-radius: 3px; }
       .row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -67,11 +68,11 @@ export class VzOverlay extends LitElement {
       .row .enter { opacity: 0; font-size: var(--vz-text-xs); color: var(--vz-text-3); }
       .row.sel .enter { opacity: 1; }
       .row.destructive .t1 { color: var(--vz-danger); }
-      .foot { display: flex; gap: 14px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--vz-border); font-size: var(--vz-text-xs); color: var(--vz-text-3); }
+      .foot { display: flex; gap: 6px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--vz-border); font-size: var(--vz-text-xs); color: var(--vz-text-3); }
       .foot .grow { flex: 1; }
 
-      .dlg { position: absolute; left: 50%; top: 18vh; transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); padding: 22px 22px 18px;
-        background: var(--vz-bg-elev); border-radius: var(--vz-radius-xl); box-shadow: var(--vz-shadow-pop); border: 1px solid var(--vz-border); animation: rise 160ms var(--vz-ease); max-height: 76vh; overflow: auto; }
+      .dlg { position: absolute; left: 50%; top: 16vh; transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); padding: 22px 22px 18px;
+        background: var(--vz-glass-strong); backdrop-filter: blur(28px) saturate(180%); border-radius: 22px; box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border); animation: rise 160ms var(--vz-ease); max-height: 76vh; overflow: auto; }
       .dlg.wide { width: min(620px, calc(100vw - 32px)); }
       .dlg h2 { margin: 0 0 6px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
       .dlg p { margin: 0 0 14px; line-height: 1.5; }
@@ -89,11 +90,11 @@ export class VzOverlay extends LitElement {
       .perm-head { display: flex; gap: 14px; align-items: flex-start; }
       .perm-head > .vz-icon { margin-top: 2px; color: var(--vz-accent); }
 
-      .pop { position: absolute; width: 320px; padding: 16px; background: var(--vz-bg-elev); border-radius: var(--vz-radius-l); box-shadow: var(--vz-shadow-pop); border: 1px solid var(--vz-border); animation: rise 140ms var(--vz-ease); }
+      .pop { position: absolute; width: 300px; padding: 16px; background: var(--vz-glass-strong); backdrop-filter: blur(28px) saturate(180%); border-radius: 20px; box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border); animation: rise 140ms var(--vz-ease); }
       .pop h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
       .pop .site { color: var(--vz-text-2); font-size: var(--vz-text-s); margin: 2px 0 14px; }
       .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-      .stat { background: var(--vz-surface-2); border-radius: var(--vz-radius); padding: 10px; text-align: center; }
+      .stat { background: var(--vz-surface-2); border-radius: 14px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--vz-text-2); }
       .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
       .stat span { font-size: var(--vz-text-xs); color: var(--vz-text-2); }
       .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -211,7 +212,7 @@ export class VzOverlay extends LitElement {
     const rows = this.rows;
     let lastSection = '';
     const anchored = s.mode === 'address' && s.anchor && !s.newTab;
-    const style = anchored ? `left:${Math.max(8, s.anchor!.x - 4)}px; top:${Math.max(8, s.anchor!.y - 4)}px; width:min(680px, calc(100vw - ${Math.max(8, s.anchor!.x - 4) + 16}px))` : '';
+    const style = anchored ? `left:${Math.max(8, s.anchor!.x - 6)}px; top:${Math.max(6, s.anchor!.y - 9)}px; width:min(${Math.max(560, Math.round(s.anchor!.width + 12))}px, calc(100vw - ${Math.max(8, s.anchor!.x - 6) + 16}px))` : '';
     const placeholder = s.mode === 'tab-search' ? t('cb_tab_search_placeholder') : s.mode === 'ask' ? t('cb_ask_placeholder') : t('cb_placeholder_long');
     const route = this.result?.route;
     const modeLabel = s.mode === 'tab-search' ? t('cb_mode_tabs') : route === 'command' ? t('cb_mode_command') : route === 'ask' || s.mode === 'ask' ? t('cb_mode_ask') : s.newTab ? t('cb_mode_new_tab') : '';
@@ -235,15 +236,17 @@ export class VzOverlay extends LitElement {
             lastSection = r.section;
             return html`${header}<div class="row ${i === this.selected ? 'sel' : ''} ${r.destructive ? 'destructive' : ''}" id="cb-${i}" role="option" aria-selected=${i === this.selected}
               @mousemove=${() => this.selected !== i && (this.selected = i)} @click=${(e: MouseEvent) => this.accept(r, e.metaKey || e.ctrlKey)}>
-              <span class="ic">${r.favicon ? html`<img src=${r.favicon} alt="" referrerpolicy="no-referrer" />` : icon(r.icon ?? kindIcon(r.kind), 15)}</span>
+              <span class="ic">${r.favicon ? html`<img src=${r.favicon} alt="" referrerpolicy="no-referrer" @error=${(e: Event) => ((e.target as HTMLImageElement).replaceWith(document.createTextNode('')))} />` : icon(r.icon ?? kindIcon(r.kind), 15)}</span>
               <span class="txt"><span class="t1">${r.title}</span>${r.detail ? html`<span class="t2">${r.detail}</span>` : nothing}</span>
               ${r.shortcut ? html`<span class="kbd">${r.shortcut}</span>` : nothing}
               <span class="enter">↵</span>
             </div>`;
           })}
         </div>
-        <div class="foot"><span>↑↓ ${t('cb_hint_move')}</span><span>↵ ${t('cb_hint_open')}</span><span>${mac ? '⌘' : 'Ctrl'}↵ ${t('cb_hint_new_tab')}</span><span class="grow"></span>
-          <span><b>&gt;</b> ${t('cb_hint_commands')}</span><span><b>?</b> ${t('cb_hint_ask')}</span></div>
+        <div class="foot" aria-hidden="true">
+          <span class="kbd" title=${t('cb_hint_move')}>↑↓</span><span class="kbd" title=${t('cb_hint_open')}>↵</span><span class="kbd" title=${t('cb_hint_new_tab')}>${mac ? '⌘' : 'Ctrl'}↵</span>
+          <span style="flex:1"></span>
+          <span class="kbd" title=${t('cb_hint_commands')}>&gt;</span><span class="kbd" title=${t('cb_hint_ask')}>?</span></div>
       </div>`;
   }
 
@@ -255,9 +258,9 @@ export class VzOverlay extends LitElement {
         <h3>${icon(st.siteEnabled ? 'shield-check' : 'shield-off', 18)} ${t('shields_title')}</h3>
         <div class="site">${st.site}</div>
         <div class="stats">
-          <div class="stat"><b>${st.blocked.ads}</b><span>${t('shields_ads')}</span></div>
-          <div class="stat"><b>${st.blocked.trackers}</b><span>${t('shields_trackers')}</span></div>
-          <div class="stat"><b>${st.blocked.total}</b><span>${t('shields_total')}</span></div>
+          <div class="stat" title=${t('shields_ads')}>${icon('grid', 16, t('shields_ads'))}<b>${st.blocked.ads}</b></div>
+          <div class="stat" title=${t('shields_trackers')}>${icon('eye-off', 16, t('shields_trackers'))}<b>${st.blocked.trackers}</b></div>
+          <div class="stat" title=${t('shields_total')}>${icon('shield-check', 16, t('shields_total'))}<b>${st.blocked.total}</b></div>
         </div>
         <div class="toggle"><span>${st.siteEnabled ? t('shields_on_for_site') : t('shields_off_for_site')}</span>
           <button class="switch" role="switch" aria-checked=${st.siteEnabled} aria-label=${t('shields_toggle_site')} ?disabled=${!st.enabled}
@@ -265,8 +268,7 @@ export class VzOverlay extends LitElement {
               const next = (await overlay.setShieldsForSite(!st.siteEnabled)) as ShieldsStatus | null;
               if (next) this.surface = { ...s, status: next };
             }}></button></div>
-        <p class="faint" style="font-size:11px;margin:10px 0 0">${t('shields_breakage_hint')}</p>
-        <button class="link" @click=${() => (this.close(), void overlay.runCommand('page.privacy'))}>${t('shields_open_dashboard')} →</button>
+        <button class="link" title=${t('shields_breakage_hint')} @click=${() => (this.close(), void overlay.runCommand('page.privacy'))}>${icon('external', 12)} ${t('shields_open_dashboard')}</button>
       </div>`;
   }
 

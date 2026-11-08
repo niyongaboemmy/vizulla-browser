@@ -469,7 +469,7 @@ export class BrowserApp {
         getInitialData: (ctx) => {
           const handlers = this.pageHandlers.get(ctx.host);
           const w = this.windowForSender(ctx.sender);
-          return { locale: this.locale, theme: (w ?? this.focused())?.resolvedTheme() ?? 'light', accent: this.profile.prefs.get('appearance.accent'), data: handlers?.init?.(null, { ...ctx, window: w }) ?? null };
+          return { locale: this.locale, theme: this.profile.prefs.get('appearance.theme'), accent: this.profile.prefs.get('appearance.accent'), data: handlers?.init?.(null, { ...ctx, window: w }) ?? null };
         },
         invoke: (ctx, method, payload) => {
           const fn = this.pageHandlers.get(ctx.host)?.[method];

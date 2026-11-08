@@ -468,7 +468,8 @@ export class BrowserWindowController extends EventEmitter {
       active.view.setBorderRadius(0);
       return;
     }
-    const radius = this.profile.prefs.get('tabs.classic') ? 0 : 10;
+    // Edge-to-edge page area (no inset frame): the page gets every pixel.
+    const radius = 0;
     if (active?.view) {
       active.view.setBounds(roundRect(this.contentRect));
       active.view.setBorderRadius(radius);

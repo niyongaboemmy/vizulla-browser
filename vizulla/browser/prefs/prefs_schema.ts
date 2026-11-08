@@ -65,7 +65,7 @@ export const DEFAULT_PREFS: Prefs = {
   'appearance.density': 'comfortable',
   'appearance.locale': 'auto',
   'appearance.defaultZoom': 1,
-  'tabs.layout': 'vertical',
+  'tabs.layout': 'horizontal',
   'tabs.classic': false,
   'tabs.sidebarWidth': 264,
   'tabs.sidebarCollapsed': false,

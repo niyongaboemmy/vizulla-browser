@@ -26,7 +26,7 @@ export class VzSidebar extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; flex-direction: column; height: 100vh; min-width: 0; padding: 0 6px 8px 8px; position: relative; }
+      :host { display: flex; flex-direction: column; height: 100vh; min-width: 0; padding: 0 8px 8px 8px; position: relative; background: var(--vz-frame-bg, var(--vz-frame)); }
       .top { display: flex; align-items: center; gap: 2px; height: 44px; padding-left: var(--traffic, 0px); -webkit-app-region: drag; }
       .top > * { -webkit-app-region: no-drag; }
       .top .spacer { flex: 1; }
@@ -63,7 +63,8 @@ export class VzSidebar extends LitElement {
       .list { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 2px 2px 8px; scrollbar-width: thin; }
       .list.anim { animation: slide var(--vz-dur) var(--vz-ease); }
       @keyframes slide { from { opacity: 0; transform: translateX(calc(var(--dir, 1) * 18px)); } }
-      .newtab { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: var(--vz-radius-s); color: var(--vz-text-2); cursor: pointer; border: 0; background: transparent; width: 100%; text-align: start; }
+      .newtab { display: flex; align-items: center; justify-content: center; height: 30px; border-radius: 999px; color: var(--vz-text-2); cursor: pointer; border: 1px dashed var(--vz-border-strong); background: transparent; width: 100%; margin-bottom: 4px; transition: all var(--vz-dur); }
+      .newtab:hover { border-style: solid; color: var(--vz-accent); border-color: var(--vz-accent); }
       .newtab:hover { background: var(--vz-surface-hover); color: var(--vz-text); }
       .sep { height: 1px; background: var(--vz-border); margin: 6px 8px; }
 
@@ -149,7 +150,7 @@ export class VzSidebar extends LitElement {
         @drop=${(e: DragEvent) => this.onDrop(e)}>${pinned.map((x) => this.renderPin(x))}</div>
       <div class="list ${this.swipe ? 'anim' : ''}" style="--dir:${this.swipe}"
         @wheel=${(e: WheelEvent) => this.onWheel(e)} @keydown=${(e: KeyboardEvent) => this.onListKey(e)} @dragleave=${() => (this.drop = null)}>
-        <button class="newtab" @click=${() => shell.newTab()}>${icon('plus', 16)} ${t('cmd_tab_new')} <span class="kbd" aria-hidden="true" style="margin-inline-start:auto">${mac ? '⌘T' : 'Ctrl+T'}</span></button>
+        <button class="newtab" aria-label=${t('cmd_tab_new')} title=${`${t('cmd_tab_new')} (${mac ? '⌘T' : 'Ctrl+T'})`} @click=${() => shell.newTab()}>${icon('plus', 16)}</button>
         <div role="tree" aria-label=${t('tabs_list')}>${this.renderTabTree(rest, pinned.length)}</div>
         <div style="height:40px" @dragover=${(e: DragEvent) => this.onDragOver(e, { index: tabs.length, groupId: null, zone: 'list' })} @drop=${(e: DragEvent) => this.onDrop(e)}></div>
       </div>
@@ -179,8 +180,8 @@ export class VzSidebar extends LitElement {
         <button class="icon-btn" aria-label=${t('cmd_settings')} title=${t('cmd_settings')} @click=${() => shell.runCommand('page.settings')}>${icon('settings', 16)}</button>
       </div>
       <div class="meta">
-        ${s.archiveCount ? html`<button @click=${() => shell.runCommand('page.archive')} title=${t('cmd_archive')}>${icon('archive', 12)} ${t('archived_count', { count: s.archiveCount })}</button>` : nothing}
-        ${s.asleepCount ? html`<button @click=${() => shell.runCommand('focus.toggle')} title=${t('cmd_focus')}>${icon('moon', 12)} ${t('asleep_count', { count: s.asleepCount })}</button>` : nothing}
+        ${s.archiveCount ? html`<button @click=${() => shell.runCommand('page.archive')} title=${t('archived_count', { count: s.archiveCount })} aria-label=${t('archived_count', { count: s.archiveCount })}>${icon('archive', 12)} ${s.archiveCount}</button>` : nothing}
+        ${s.asleepCount ? html`<button @click=${() => shell.runCommand('focus.toggle')} title=${t('asleep_count', { count: s.asleepCount })} aria-label=${t('asleep_count', { count: s.asleepCount })}>${icon('moon', 12)} ${s.asleepCount}</button>` : nothing}
       </div>
     `;
   }

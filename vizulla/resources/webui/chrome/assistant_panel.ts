@@ -27,18 +27,21 @@ class VzAssistant extends LitElement {
     base,
     css`
       :host { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-      .head { display: flex; align-items: center; gap: 8px; padding: 10px 14px 8px; }
+      .head { display: flex; align-items: center; gap: 8px; padding: 4px 14px 8px; }
       .badge { display: inline-flex; align-items: center; gap: 5px; font-size: var(--vz-text-xs); font-weight: 700; padding: 3px 8px; border-radius: 999px; }
       .badge.dev { background: color-mix(in srgb, var(--vz-ok) 14%, transparent); color: var(--vz-ok); }
       .badge.cloud { background: color-mix(in srgb, var(--vz-warn) 16%, transparent); color: var(--vz-warn); }
       .page { flex: 1; min-width: 0; font-size: var(--vz-text-s); color: var(--vz-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .scroll { flex: 1; overflow-y: auto; padding: 4px 14px 14px; min-height: 0; }
       .quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 12px; }
-      .quick button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--vz-border); background: var(--vz-bg-elev); cursor: pointer; font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text-2); transition: all var(--vz-dur); }
-      .quick button:hover { border-color: var(--vz-accent); color: var(--vz-accent); }
+      .quick { justify-content: center; gap: 10px; }
+      .quick button { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; border: 0; background: var(--vz-surface-2); cursor: pointer; color: var(--vz-text-2); transition: all var(--vz-dur) var(--vz-ease); }
+      .quick button:hover:not([disabled]) { background: var(--vz-accent-soft); color: var(--vz-accent); transform: translateY(-2px); box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--vz-accent) 50%, transparent); }
+      .quick button[aria-pressed='true'] { background: var(--vz-accent); color: var(--vz-on-accent); }
       .empty { text-align: center; padding: 30px 12px 10px; color: var(--vz-text-2); }
-      .empty .orb { width: 52px; height: 52px; border-radius: 18px; margin: 0 auto 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--vz-accent), color-mix(in srgb, var(--vz-accent) 35%, #22d3ee)); box-shadow: 0 10px 30px color-mix(in srgb, var(--vz-accent) 35%, transparent); }
-      .empty h3 { margin: 0 0 6px; color: var(--vz-text); font-size: 15px; }
+      .empty .orb { width: 64px; height: 64px; border-radius: 22px; margin: 18px auto 14px; animation: float 4s ease-in-out infinite; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--vz-accent), color-mix(in srgb, var(--vz-accent) 35%, #22d3ee)); box-shadow: 0 10px 30px color-mix(in srgb, var(--vz-accent) 35%, transparent); }
+      @keyframes float { 50% { transform: translateY(-6px) rotate(4deg); } }
+      .empty h3 { margin: 0 0 6px; color: var(--vz-text); font-size: 15px; font-weight: 650; }
       .empty p { margin: 0; font-size: var(--vz-text-s); line-height: 1.5; }
       .msg { margin: 12px 0; animation: in 200ms var(--vz-ease); }
       @keyframes in { from { opacity: 0; transform: translateY(4px); } }
@@ -72,8 +75,8 @@ class VzAssistant extends LitElement {
       .thinking i { width: 6px; height: 6px; border-radius: 50%; background: var(--vz-text-3); animation: dot 1.2s infinite; }
       .thinking i:nth-child(2) { animation-delay: .15s; } .thinking i:nth-child(3) { animation-delay: .3s; }
       @keyframes dot { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
-      .composer { margin: 0 10px 10px; border: 1px solid var(--vz-border); border-radius: 14px; background: var(--vz-bg-elev); padding: 8px 8px 6px 12px; transition: border-color var(--vz-dur), box-shadow var(--vz-dur); }
-      .composer:focus-within { border-color: var(--vz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vz-accent) 18%, transparent); }
+      .composer { margin: 0 10px 10px; border: 1px solid var(--vz-border); border-radius: 18px; background: var(--vz-omnibox); padding: 8px 8px 6px 12px; transition: border-color var(--vz-dur), box-shadow var(--vz-dur); }
+      .composer:focus-within { background: var(--vz-toolbar); border-color: var(--vz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vz-accent) 18%, transparent); }
       textarea { width: 100%; border: 0; padding: 0; resize: none; background: transparent; min-height: 22px; max-height: 140px; font-size: 13.5px; line-height: 1.45; box-shadow: none !important; }
       .row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
       .row .grow { flex: 1; font-size: var(--vz-text-xs); color: var(--vz-text-3); }
@@ -134,14 +137,14 @@ class VzAssistant extends LitElement {
       </div>
       <div class="scroll" @scroll=${(e: Event) => this.onScroll(e)} aria-live="polite">
         ${!a.messages.length
-          ? html`<div class="empty"><div class="orb">${icon('sparkle', 24)}</div><h3>${t('ai_empty_title')}</h3><p>${blocked ? t('ai_err_internal_page') : t('ai_empty_body')}</p></div>`
+          ? html`<div class="empty"><div class="orb">${icon('sparkle', 28)}</div><h3>${blocked ? t('ai_err_internal_page') : t('ai_empty_title')}</h3></div>`
           : nothing}
         ${!blocked
           ? html`<div class="quick">
-              <button @click=${() => api.summarize('tldr')} ?disabled=${a.busy}>${icon('zap', 13)} ${t('ai_tldr')}</button>
-              <button @click=${() => api.summarize('key-points')} ?disabled=${a.busy}>${icon('reader', 13)} ${t('ai_key_points')}</button>
-              <button @click=${() => api.summarize('outline')} ?disabled=${a.busy}>${icon('layers', 13)} ${t('ai_outline')}</button>
-              ${this.state.features.VizullaMultiTab ? html`<button @click=${() => (this.picking = !this.picking)}>${icon('table', 13)} ${t('ai_compare_tabs')}</button>` : nothing}
+              <button aria-label=${t('ai_tldr')} title=${t('ai_tldr')} @click=${() => api.summarize('tldr')} ?disabled=${a.busy}>${icon('zap', 18)}</button>
+              <button aria-label=${t('ai_key_points')} title=${t('ai_key_points')} @click=${() => api.summarize('key-points')} ?disabled=${a.busy}>${icon('reader', 18)}</button>
+              <button aria-label=${t('ai_outline')} title=${t('ai_outline')} @click=${() => api.summarize('outline')} ?disabled=${a.busy}>${icon('layers', 18)}</button>
+              ${this.state.features.VizullaMultiTab ? html`<button aria-label=${t('ai_compare_tabs')} title=${t('ai_compare_tabs')} aria-pressed=${this.picking} @click=${() => (this.picking = !this.picking)}>${icon('table', 18)}</button>` : nothing}
             </div>`
           : nothing}
         ${a.messages.map((m) => this.renderMessage(m))}
@@ -161,7 +164,7 @@ class VzAssistant extends LitElement {
               this.send();
             }
           }}></textarea>
-        <div class="row"><span class="grow">${t('ai_composer_hint')}</span>
+        <div class="row"><span class="grow" title=${t('ai_composer_hint')}>${icon(dev ? 'cpu' : 'cloud', 12)}</span>
           ${a.busy
             ? html`<button class="send" aria-label=${t('action_stop')} @click=${() => api.stop()}>${icon('stop', 13)}</button>`
             : html`<button class="send" aria-label=${t('ai_send')} ?disabled=${!this.draft.trim() || blocked} @click=${() => this.send()}>${icon('send', 14)}</button>`}

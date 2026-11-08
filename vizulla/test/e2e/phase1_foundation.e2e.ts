@@ -16,7 +16,8 @@ const activeTab = (h: Harness) => inMain(h, (vz) => {
 test('launches branded with the shell and a start page', async () => {
   h = await launch();
   const chrome = await h.chrome();
-  await expect(chrome.locator('vz-sidebar')).toBeVisible();
+  await expect(chrome.locator('vz-tabstrip')).toBeVisible();
+  await expect(chrome.locator('vz-toolbar')).toBeVisible();
   const info = await inMain(h, (vz, _a, electron) => ({ name: electron.app.getName(), windows: vz.windows.size, state: vz.focused().state() }));
   expect(info.name).toBe('Vizulla');
   expect(info.windows).toBe(1);

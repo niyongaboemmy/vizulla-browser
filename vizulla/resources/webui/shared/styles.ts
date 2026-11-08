@@ -8,8 +8,8 @@ export const base = css`
   .vz-icon { flex: none; display: block; }
   :focus-visible { outline: 2px solid var(--vz-focus); outline-offset: 2px; border-radius: var(--vz-radius-s); }
   .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px;
-    border-radius: var(--vz-radius-s); border: 1px solid var(--vz-border); background: var(--vz-bg-elev);
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 14px;
+    border-radius: 999px; border: 1px solid var(--vz-border); background: var(--vz-bg-elev);
     cursor: pointer; font-size: var(--vz-text-m); font-weight: 500; transition: background var(--vz-dur) var(--vz-ease), border-color var(--vz-dur);
     white-space: nowrap;
   }
@@ -23,13 +23,13 @@ export const base = css`
   .btn.ghost:hover { background: var(--vz-surface-hover); }
   .btn[disabled] { opacity: .5; cursor: default; }
   .icon-btn {
-    display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--vz-radius-s);
+    display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
     border: 0; background: transparent; color: var(--vz-text-2); cursor: pointer; transition: background var(--vz-dur), color var(--vz-dur);
   }
   .icon-btn:hover:not([disabled]) { background: var(--vz-surface-hover); color: var(--vz-text); }
   .icon-btn:active:not([disabled]) { background: var(--vz-surface-active); }
   .icon-btn[disabled] { opacity: .35; cursor: default; }
-  .icon-btn.on { color: var(--vz-accent); }
+  .icon-btn.on { color: var(--vz-accent); background: var(--vz-accent-soft); }
   input[type=text], input[type=search], input[type=password], input[type=url], textarea, select {
     font: inherit; color: var(--vz-text); background: var(--vz-bg-elev); border: 1px solid var(--vz-border);
     border-radius: var(--vz-radius-s); padding: 6px 10px; outline: none; transition: border-color var(--vz-dur), box-shadow var(--vz-dur);

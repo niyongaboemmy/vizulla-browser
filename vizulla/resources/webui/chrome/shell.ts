@@ -32,31 +32,36 @@ export class VzShell extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: grid; height: 100vh; overflow: hidden; user-select: none; background: var(--vz-shell-bg, var(--vz-bg)); }
+      :host { display: grid; height: 100vh; overflow: hidden; user-select: none; background: var(--vz-frame-bg, var(--vz-frame)); }
       :host([layout='vertical']) { grid-template-columns: auto 1fr auto; }
       :host([layout='horizontal']) { grid-template-rows: auto auto auto 1fr; grid-template-columns: 1fr auto; }
       :host([layout='horizontal']) vz-tabstrip, :host([layout='horizontal']) vz-toolbar, :host([layout='horizontal']) .bookmarks { grid-column: 1 / -1; }
-      .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
-      .frame-wrap { flex: 1; display: flex; gap: 8px; padding: 8px 8px 8px 0; min-height: 0; }
-      :host([layout='horizontal']) .frame-wrap, :host([sidebar='collapsed']) .frame-wrap { padding-left: 8px; }
-      :host([classic]) .frame-wrap { padding: 0; gap: 2px; }
-      .frame {
-        flex: 1; min-width: 0; border-radius: 10px; background: var(--vz-bg-elev); box-shadow: var(--vz-shadow);
-        position: relative; outline: 1px solid var(--vz-border);
-      }
-      :host([classic]) .frame { border-radius: 0; box-shadow: none; outline: none; }
-      .frame.split-active { outline: 2px solid var(--vz-accent); }
+      /* Explicit rows: the bookmarks row exists only in Classic mode; the page always gets the 1fr row. */
+      :host([layout='horizontal']) vz-tabstrip { grid-row: 1; }
+      :host([layout='horizontal']) vz-toolbar { grid-row: 2; }
+      :host([layout='horizontal']) .bookmarks { grid-row: 3; }
+      :host([layout='horizontal']) .main, :host([layout='horizontal']) .panel-host { grid-row: 4; }
+      .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; background: var(--vz-toolbar); }
+      /* The page gets every pixel: no inset, no rounded frame. */
+      .frame-wrap { flex: 1; display: flex; gap: 2px; min-height: 0; background: var(--vz-border); }
+      .frame { flex: 1; min-width: 0; background: var(--vz-toolbar); position: relative; }
+      .frame.split-active { box-shadow: inset 0 2px 0 var(--vz-accent); }
+      :host([layout='vertical']) .main { box-shadow: -1px 0 0 var(--vz-border); }
       .strip {
-        display: flex; align-items: center; gap: 8px; margin: 8px 8px 0 0; padding: 6px 8px 6px 12px; border-radius: 10px;
-        background: var(--vz-bg-elev); border: 1px solid var(--vz-border); box-shadow: var(--vz-shadow);
+        display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 8px 0 14px; flex: none;
+        background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: 0 1px 0 var(--vz-border); animation: slide 180ms var(--vz-ease);
       }
-      :host([layout='horizontal']) .strip, :host([sidebar='collapsed']) .strip { margin-left: 8px; }
-      .strip input { flex: 1; min-width: 0; height: 26px; }
+      @keyframes slide { from { opacity: 0; transform: translateY(-6px); } }
+      .strip input { flex: 1; min-width: 0; max-width: 420px; height: 28px; border-radius: 999px; padding: 0 12px; background: var(--vz-omnibox); border-color: transparent; }
       .strip .count { font-size: var(--vz-text-s); color: var(--vz-text-2); min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
-      .agent-bar { background: color-mix(in srgb, var(--vz-accent) 14%, var(--vz-bg-elev)); border-color: color-mix(in srgb, var(--vz-accent) 40%, transparent); }
-      .agent-bar .label { flex: 1; font-weight: 600; min-width: 0; }
-      .agent-bar .step { font-size: var(--vz-text-s); color: var(--vz-text-2); font-weight: 500; }
-      .resize { width: 8px; cursor: col-resize; position: relative; z-index: 2; margin: 0 -4px; }
+      .strip .grow { flex: 1; }
+      .agent-bar { background: linear-gradient(90deg, color-mix(in srgb, var(--vz-accent) 16%, var(--vz-toolbar)), var(--vz-glass-strong)); }
+      .agent-bar .label { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .agent-bar .step { font-variant-numeric: tabular-nums; color: var(--vz-text-2); font-weight: 600; font-size: 12px; }
+      .agent-bar .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--vz-accent); animation: pulse 1.4s ease-in-out infinite; flex: none; }
+      @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
+      .panel-host { display: flex; background: var(--vz-toolbar); box-shadow: -1px 0 0 var(--vz-border); }
+      .resize { width: 6px; cursor: col-resize; position: relative; z-index: 2; margin: 0 -3px; }
       .resize::after { content: ''; position: absolute; inset: 30% 3px; border-radius: 2px; background: transparent; transition: background var(--vz-dur); }
       .resize:hover::after, .resize.active::after { background: var(--vz-border-strong); }
       .bookmarks { display: flex; gap: 2px; padding: 0 8px 6px; overflow: hidden; }
@@ -89,7 +94,8 @@ export class VzShell extends LitElement {
       this.lastLocale = s.locale;
     }
     applyTheme(s.theme, s.accent, s.density);
-    if (s.platform.startsWith('darwin')) document.documentElement.style.setProperty('--vz-shell-bg', 'color-mix(in srgb, var(--vz-bg) 78%, transparent)');
+    // macOS: a slightly translucent frame lets the window vibrancy show through (glass).
+    if (s.platform.startsWith('darwin')) document.documentElement.style.setProperty('--vz-frame-bg', 'color-mix(in srgb, var(--vz-frame) 86%, transparent)');
     this.state = s;
     this.setAttribute('layout', s.layout);
     this.setAttribute('sidebar', s.sidebarCollapsed ? 'collapsed' : 'open');
@@ -205,7 +211,7 @@ export class VzShell extends LitElement {
         </div>
       </div>
       ${panel
-        ? html`<div style="display:flex">
+        ? html`<div class="panel-host">
             <div class="resize ${this.resizing === 'panel' ? 'active' : ''}" role="separator" aria-orientation="vertical" aria-label=${t('a11y_resize_panel')}
               @pointerdown=${(e: PointerEvent) => this.startResize('panel', e)}></div>
             <vz-panels .state=${s} style="width:${s.panelWidth}px"></vz-panels></div>`
@@ -220,6 +226,7 @@ export class VzShell extends LitElement {
       ${icon('search', 15)}
       <input type="search" placeholder=${t('find_placeholder')} aria-label=${t('find_placeholder')}
         @input=${(e: InputEvent) => this.onFind(e)} @keydown=${(e: KeyboardEvent) => (e.key === 'Enter' ? this.onFind(e) : e.key === 'Escape' && this.closeFind())} />
+      <span class="grow"></span>
       <span class="count" aria-live="polite">${r ? (r.total ? t('find_count', { active: r.active, total: r.total }) : t('find_none')) : ''}</span>
       <button class="icon-btn" aria-label=${t('find_prev')} @click=${(e: Event) => this.onFind(e as unknown as InputEvent, false, true)}>${icon('chevron-left', 15)}</button>
       <button class="icon-btn" aria-label=${t('find_next')} @click=${(e: Event) => this.onFind(e as unknown as InputEvent, true, true)}>${icon('chevron-right', 15)}</button>
@@ -234,19 +241,18 @@ export class VzShell extends LitElement {
     const paused = a.status === 'paused';
     const active = running || paused || a.status === 'awaiting-confirmation' || a.status === 'planning' || a.status === 'awaiting-approval';
     return html`<div class="strip agent-bar" role="region" aria-label=${t('agent_bar_label')}>
-      ${icon('bot', 16)}
-      <div class="label ellipsis">
-        ${a.stepCount && active ? html`<span class="step">${t('agent_step', { n: a.stepIndex + 1, total: a.stepCount })} · </span>` : nothing}${a.stepLabel || a.goal}
-      </div>
-      ${a.session === 'grant' ? html`<span class="chip">${icon('key', 11)} ${a.grantOrigin}</span>` : html`<span class="chip">${icon('shield', 11)} ${t('agent_isolated')}</span>`}
+      ${running ? html`<span class="pulse" aria-hidden="true"></span>` : icon('bot', 16)}
+      ${a.stepCount && active ? html`<span class="step">${a.stepIndex + 1}/${a.stepCount}</span>` : nothing}
+      <div class="label" title=${a.goal}>${a.stepLabel || a.goal}</div>
+      <span class="chip" title=${a.session === 'grant' ? a.grantOrigin ?? '' : t('agent_isolated')}>${icon(a.session === 'grant' ? 'key' : 'shield', 11)} ${a.session === 'grant' ? a.grantOrigin : t('agent_isolated')}</span>
       ${active
         ? html`
-            ${running ? html`<button class="btn ghost" @click=${() => shell.agentControl('pause')}>${icon('pause', 14)} ${t('agent_pause')}</button>` : nothing}
-            ${paused ? html`<button class="btn ghost" @click=${() => shell.agentControl('resume')}>${icon('play', 14)} ${t('agent_resume')}</button>` : nothing}
-            <button class="btn ghost" @click=${() => shell.agentControl('takeover')}>${icon('hand', 14)} ${t('agent_takeover')}</button>
-            <button class="btn danger" @click=${() => shell.agentControl('stop')}>${icon('stop', 14)} ${t('agent_stop')} <span class="kbd">Esc</span></button>`
+            ${running ? html`<button class="icon-btn" aria-label=${t('agent_pause')} title=${t('agent_pause')} @click=${() => shell.agentControl('pause')}>${icon('pause', 15)}</button>` : nothing}
+            ${paused ? html`<button class="icon-btn" aria-label=${t('agent_resume')} title=${t('agent_resume')} @click=${() => shell.agentControl('resume')}>${icon('play', 15)}</button>` : nothing}
+            <button class="icon-btn" aria-label=${t('agent_takeover')} title=${t('agent_takeover')} @click=${() => shell.agentControl('takeover')}>${icon('hand', 15)}</button>
+            <button class="btn danger" aria-label=${t('agent_stop')} title=${t('agent_stop')} @click=${() => shell.agentControl('stop')}>${icon('stop', 13)} <span class="kbd">Esc</span></button>`
         : html`<span class="chip">${t(`agent_status_${a.status.replace(/-/g, '_')}` as never)}</span>
-            <button class="icon-btn" aria-label=${t('action_close')} @click=${() => shell.agentControl('stop')}>${icon('x', 14)}</button>`}
+            <button class="icon-btn" aria-label=${t('action_close')} title=${t('action_close')} @click=${() => shell.agentControl('stop')}>${icon('x', 14)}</button>`}
     </div>`;
   }
 

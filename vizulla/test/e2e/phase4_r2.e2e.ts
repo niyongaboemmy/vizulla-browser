@@ -58,7 +58,11 @@ test('Memory: opt-in indexing, encrypted at rest, recall in the Command Bar, del
   await waitTitle(h, 'Kigali Coffee Guide');
   await new Promise((r) => setTimeout(r, 1200));
   expect(await inMain(h, (vz) => vz.__services.memory.stats.indexed)).toBe(0);
-  await inMain(h, (vz) => vz.profile.prefs.set('memory.enabled', true));
+  // Indexing runs only on AC power by default; allow battery so the test doesn't depend on the charger.
+  await inMain(h, (vz) => {
+    vz.profile.prefs.set('memory.indexOnBattery', true);
+    vz.profile.prefs.set('memory.enabled', true);
+  });
   await inMain(h, (vz) => vz.focused().activeTab().wc.reload());
   await waitFor(() => inMain(h, (vz) => vz.__services.memory.stats.indexed), (n) => n >= 1, 15_000);
   // Recall through the Command Bar.

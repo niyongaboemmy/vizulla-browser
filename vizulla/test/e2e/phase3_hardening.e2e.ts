@@ -66,7 +66,7 @@ test('performance budgets on this machine (PERF-01/02 smoke; PERF-05 is a unit t
   const t0 = Date.now();
   h = await launch();
   const chrome = await h.chrome();
-  await chrome.locator('vz-sidebar').waitFor();
+  await chrome.locator('vz-tabstrip').waitFor();
   const startup = Date.now() - t0;
   await chrome.waitForTimeout(1500);
   const metrics = await inMain(h, (_vz, _a, electron) => electron.app.getAppMetrics().map((m: any) => ({ type: m.type, kb: m.memory.workingSetSize })));
@@ -129,7 +129,7 @@ test('localization: French UI is complete and the pseudo-locale leaves no unwrap
   h = await launch();
   const chrome = await h.chrome();
   await inMain(h, (vz) => vz.profile.prefs.set('appearance.locale', 'fr'));
-  await expect(chrome.locator('vz-sidebar')).toContainText('Nouvel onglet');
+  await expect(chrome.locator('vz-tabstrip')).toContainText('Nouvel onglet');
   await inMain(h, (vz) => vz.profile.prefs.set('appearance.locale', 'pseudo'));
   await chrome.waitForTimeout(300);
   const texts: string[] = await chrome.evaluate(() => {
