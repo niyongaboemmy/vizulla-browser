@@ -1,6 +1,6 @@
-// R2 privacy features (Track G): fingerprinting protection config and cookie
-// banner auto-reject (P4-BRW-10/11). Both respect Shields site exceptions.
-import type { Session } from 'electron';
+// R2 privacy features (Track G): fingerprinting protection config, cookie banner
+// auto-reject (P4-BRW-10/11) and WebRTC IP-leak protection. All respect Shields site exceptions.
+import { app as electronApp, webContents, type Session, type WebContents } from 'electron';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { BrowserApp } from '../browser_app';
 import type { WebTab } from '../tabs/web_tab';
@@ -62,6 +62,17 @@ export function installPlatformFeatures(app: BrowserApp): void {
     const level = !p.shields.isSiteEnabled(top) ? 'off' : ses !== p.session ? 'strict' : p.prefs.get('shields.fingerprinting');
     return { level, seed: createHmac('sha256', secret).update(siteOf(top)).digest().readUInt32LE(0) };
   };
+  // WebRTC never reveals local addresses (or the real IP behind a VPN): normal windows use
+  // the public interface only; private windows send no UDP outside a proxy at all.
+  const applyWebRtc = (wc: WebContents) => {
+    if (wc.session === app.chromeSession) return;
+    const policy = !p.prefs.get('shields.webrtcProtection') ? 'default' : wc.session.storagePath === null ? 'disable_non_proxied_udp' : 'default_public_interface_only';
+    wc.setWebRTCIPHandlingPolicy(policy);
+  };
+  electronApp.on('web-contents-created', (_e, wc) => applyWebRtc(wc));
+  p.prefs.observe('shields.webrtcProtection', () => {
+    for (const wc of webContents.getAllWebContents()) if (wc.getType() !== 'window') applyWebRtc(wc);
+  });
   app.hooks.windowCreated.push((w) => {
     w.on('tab-dom-ready', (tab: WebTab) => {
       if (!p.prefs.get('shields.cookieBanners') || !tab.wc || !/^https?:/.test(tab.url) || !p.shields.isSiteEnabled(tab.url)) return;

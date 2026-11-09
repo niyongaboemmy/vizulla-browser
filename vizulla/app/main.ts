@@ -22,7 +22,10 @@ app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-domain-reliability');
 app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('disable-features', 'InterestFeedContentSuggestions,MediaRouter,OptimizationHints,Translate,AutofillServerCommunication,CertificateTransparencyComponentUpdater');
-app.commandLine.appendSwitch('enable-features', 'PartitionedCookies,ThirdPartyStoragePartitioning');
+// Global Privacy Control is Chromium's own (Sec-GPC on every request + navigator.globalPrivacyControl):
+// no header hook in the browser process. Like third-party cookies, a change applies after a restart.
+const gpc = startupPref('privacy.gpc') !== false ? ',GlobalPrivacyControl,GlobalPrivacyControlForce' : '';
+app.commandLine.appendSwitch('enable-features', `PartitionedCookies,ThirdPartyStoragePartitioning${gpc}`);
 // Third-party cookies (SHD-04) are blocked by Chromium itself: no per-request hook in
 // the browser process (that cost ~25% on request-heavy pages). Read before the profile
 // loads, so a change in Settings applies after a restart.
@@ -61,7 +64,7 @@ if (!app.requestSingleInstanceLock()) {
     else pendingUrls.push(url);
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     const t0 = performance.now();
     const profile = Profile.createRegular({
       dir: app.getPath('userData'),
@@ -72,6 +75,9 @@ if (!app.requestSingleInstanceLock()) {
     if (profile.prefs.get('privacy.crashReports')) {
       crashReporter.start({ submitURL: process.env.VZ_CRASH_URL ?? 'http://localhost:8790/crash', uploadToServer: true, compress: true });
     }
+    // After a crash, clear on exit never ran: drop cookies now (site storage waits for the next
+    // quit, which can exclude extensions' data once they're loaded).
+    if (profile.prefs.get('privacy.clearOnExit')) await profile.session.clearData({ dataTypes: ['cookies'] }).catch(() => undefined);
     profile.shields.applyDnsConfig();
     profile.shields.startUpdates();
     browser = new BrowserApp(profile, OUT);
@@ -92,7 +98,15 @@ if (!app.requestSingleInstanceLock()) {
     if (browser && !browser.windows.size) browser.openWindow();
   });
   // Save while everything is alive; close stores only after every window is gone.
-  app.on('before-quit', () => browser?.prepareToQuit());
+  let siteDataCleared = false;
+  app.on('before-quit', (e) => {
+    browser?.prepareToQuit();
+    // Clear on exit runs once, before the stores close; quitting resumes when it's done.
+    if (!browser || siteDataCleared || !browser.profile.prefs.get('privacy.clearOnExit')) return;
+    e.preventDefault();
+    siteDataCleared = true;
+    void browser.clearSiteData().finally(() => app.quit());
+  });
   app.on('will-quit', () => browser?.shutdown());
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();

@@ -16,8 +16,10 @@ interface Data {
   locales: { id: string; name: string }[];
   providerKeys: Record<string, boolean>;
   permissions: { origin: string; permission: string; decision: string }[];
+  permissionKinds: { id: string; chrome: 'ask' | 'allow' | 'block'; current: 'ask' | 'allow' | 'block'; common: boolean; icon: string }[];
   passwords: number;
   shields: { engineVersion: number; ruleSource: string };
+  blocked30d: number;
   isDefaultBrowser: boolean;
   encryption: string;
   touchId: boolean;
@@ -110,6 +112,20 @@ class VzSettings extends VzPage<Data> {
       td.pw { font-family: var(--vz-font-mono); }
       .engine { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
       .engine input[name=name] { width: 140px; } .engine input[name=url] { width: 260px; max-width: 100%; }
+      .checkup { margin-bottom: 16px; padding: 16px 18px; }
+      .checkup-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+      .checkup-head .grow { flex: 1; min-width: 200px; }
+      .checkup .title { font-weight: 650; }
+      .checkup .link { all: unset; cursor: pointer; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; font-size: var(--vz-text-s); color: var(--vz-accent); }
+      .checkup .link:hover { text-decoration: underline; }
+      .ring { --c: var(--vz-warn); width: 48px; height: 48px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--c);
+        background: radial-gradient(closest-side, var(--vz-bg-elev) 80%, transparent 81%), conic-gradient(var(--c) calc(var(--p) * 1%), var(--vz-surface-2) 0); }
+      .checkup.good .ring { --c: var(--vz-ok); }
+      .checks { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; }
+      .checks li { display: flex; align-items: center; gap: 7px; font-size: var(--vz-text-s); color: var(--vz-text-2); }
+      .checks li.on .vz-icon { color: var(--vz-ok); }
+      .checks li.off { color: var(--vz-text); }
+      .checks li.off .vz-icon { color: var(--vz-warn); }
       .primary-ic { background: var(--vz-accent); color: var(--vz-on-accent); }
       .primary-ic:hover:not([disabled]) { background: var(--vz-accent); color: var(--vz-on-accent); filter: brightness(1.08); }
       @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } nav { position: static; flex-direction: row; flex-wrap: wrap; } }
@@ -240,6 +256,10 @@ class VzSettings extends VzPage<Data> {
       { section: 'shields', label: L('set_doh'), desc: L('set_doh_desc'), control: () => this.seg('shields.doh', [{ id: 'off', name: L('doh_off') }, { id: 'automatic', name: L('doh_auto') }, { id: 'secure', name: L('doh_secure') }]), keywords: 'dns' },
       { section: 'shields', label: L('set_fingerprinting'), desc: L('set_fingerprinting_desc'), control: () => this.seg('shields.fingerprinting', [{ id: 'off', name: L('fp_off') }, { id: 'standard', name: L('fp_standard') }, { id: 'strict', name: L('fp_strict') }]) },
       { section: 'shields', label: L('set_cookie_banners'), desc: L('set_cookie_banners_desc'), control: () => this.sw('shields.cookieBanners'), keywords: 'consent gdpr' },
+      { section: 'shields', label: L('set_clean_links'), desc: L('set_clean_links_desc'), control: () => this.sw('shields.cleanLinks'), keywords: 'utm fbclid gclid tracking parameters url redirect' },
+      { section: 'shields', label: L('set_gpc'), desc: `${L('set_gpc_desc')} ${L('set_restart_note')}`, control: () => this.sw('privacy.gpc'), keywords: 'gpc do not sell track dnt opt out ccpa' },
+      { section: 'shields', label: L('set_webrtc'), desc: L('set_webrtc_desc'), control: () => this.sw('shields.webrtcProtection'), keywords: 'webrtc ip leak vpn' },
+      { section: 'shields', label: L('set_clear_on_exit'), desc: L('set_clear_on_exit_desc'), control: () => this.sw('privacy.clearOnExit'), keywords: 'cookies delete quit close forget' },
       { section: 'shields', label: L('set_shields_lists'), desc: t('set_shields_lists_desc', { source: d.shields.ruleSource, version: d.shields.engineVersion }),
         control: () => html`<button class="btn" @click=${async () => (this.note = await this.invoke<string>('updateShieldsLists'))}>${L('set_check_updates')}</button>` },
       { section: 'shields', label: L('set_exceptions'), desc: (this.p['shields.siteExceptions'] as string[]).join(', ') || L('set_exceptions_none'), control: () => html`${(this.p['shields.siteExceptions'] as string[]).map((s) => html`<button class="chip" style="border:0;cursor:pointer" @click=${async () => (this.data = { ...d, ...(await this.invoke<Data>('removeShieldsException', s)) })}>${s} ${icon('x', 10)}</button>`)}` },
@@ -298,6 +318,7 @@ class VzSettings extends VzPage<Data> {
         <div class="search">${icon('search', 15)}<input type="search" placeholder=${t('set_search')} aria-label=${t('set_search')} .value=${this.filter} @input=${(e: InputEvent) => (this.filter = (e.target as HTMLInputElement).value)} /></div>
         ${this.note ? html`<div class="note" role="status">${icon('info', 14)} ${this.note}</div>` : nothing}
         ${q ? html`<h2 class="sec-title">${t('set_results', { count: visible.length })}</h2>` : html`<h2 class="sec-title">${t(SECTIONS.find((s) => s.id === this.section)?.title as StringKey)}</h2>`}
+        ${!q && this.section === 'shields' ? this.renderCheckup() : nothing}
         ${!q && this.section === 'ai' ? this.renderAi() : nothing}
         ${!q && this.section === 'sync' ? this.renderSync() : nothing}
         ${visible.length ? html`<div class="card rise">${visible.map((r) => html`<div class="row"><div class="grow"><div class="title">${r.label}</div>${r.desc ? html`<div class="desc">${r.desc}</div>` : nothing}</div>${this.withLabel(r.label, r.control)}</div>`)}</div>` : nothing}
@@ -306,6 +327,40 @@ class VzSettings extends VzPage<Data> {
         ${!q && this.section === 'import' ? this.renderImport() : nothing}
         ${!q && this.section === 'permissions' ? this.renderPermissions() : nothing}
       </main>
+    </div>`;
+  }
+
+  /** Privacy checkup: every recommended protection at a glance, and one click to turn on what's off. */
+  private renderCheckup(): TemplateResult {
+    const checks: { key: string; label: StringKey; on: boolean; fix: unknown }[] = [
+      { key: 'shields.enabled', label: 'chk_shields', on: !!this.p['shields.enabled'], fix: true },
+      { key: 'shields.blockThirdPartyCookies', label: 'chk_cookies', on: !!this.p['shields.blockThirdPartyCookies'], fix: true },
+      { key: 'shields.httpsFirst', label: 'chk_https', on: !!this.p['shields.httpsFirst'], fix: true },
+      { key: 'shields.doh', label: 'chk_dns', on: this.p['shields.doh'] !== 'off', fix: 'automatic' },
+      { key: 'shields.fingerprinting', label: 'chk_fingerprint', on: this.p['shields.fingerprinting'] !== 'off', fix: 'standard' },
+      { key: 'shields.cookieBanners', label: 'chk_banners', on: !!this.p['shields.cookieBanners'], fix: true },
+      { key: 'shields.cleanLinks', label: 'chk_links', on: !!this.p['shields.cleanLinks'], fix: true },
+      { key: 'shields.webrtcProtection', label: 'chk_webrtc', on: !!this.p['shields.webrtcProtection'], fix: true },
+      { key: 'privacy.gpc', label: 'chk_gpc', on: !!this.p['privacy.gpc'], fix: true },
+      { key: 'privacy.telemetry', label: 'chk_telemetry', on: !this.p['privacy.telemetry'], fix: false },
+    ];
+    const on = checks.filter((c) => c.on).length;
+    const total = checks.length;
+    const all = on === total;
+    const fixAll = async () => {
+      for (const c of checks) if (!c.on) await this.set(c.key, c.fix);
+    };
+    return html`<div class="card rise checkup ${all ? 'good' : ''}">
+      <div class="checkup-head">
+        <div class="ring" style="--p:${(on / total) * 100}" role="img" aria-label=${t('checkup_some', { on, total })}>${icon(all ? 'shield-check' : 'shield', 22)}</div>
+        <div class="grow">
+          <div class="title">${t('checkup_title')}</div>
+          <div class="desc">${all ? t('checkup_all', { total }) : t('checkup_some', { on, total })}</div>
+          ${this.data!.blocked30d ? html`<button class="link" @click=${() => this.invoke('open', { url: 'vizulla://privacy' })}>${t('checkup_blocked', { count: this.data!.blocked30d.toLocaleString() })} ${icon('external', 11)}</button>` : nothing}
+        </div>
+        ${all ? nothing : html`<button class="btn primary" @click=${() => void fixAll()}>${icon('shield-check', 14)} ${t('checkup_fix')}</button>`}
+      </div>
+      <ul class="checks">${checks.map((c) => html`<li class=${c.on ? 'on' : 'off'}>${icon(c.on ? 'check' : 'alert', 13)} ${t(c.label)}</li>`)}</ul>
     </div>`;
   }
 
@@ -460,12 +515,36 @@ class VzSettings extends VzPage<Data> {
     </div>`;
   }
 
+  /** Permissions: Chrome's defaults per capability, then every site's own choices. */
   private renderPermissions(): TemplateResult {
-    const perms = this.data!.permissions;
-    return html`<div class="card" style="margin-top:16px">
-      ${perms.length ? perms.map((p) => html`<div class="row">${icon(p.decision === 'allow' ? 'check' : 'x', 14)}<div class="grow"><div class="title">${p.origin}</div><div class="desc">${p.permission} · ${p.decision === 'allow' ? t('perm_allow') : t('perm_block')}</div></div>
-        <button class="btn ghost" @click=${async () => (this.data = { ...this.data!, permissions: await this.invoke('removePermission', { origin: p.origin, permission: p.permission }) })}>${t('action_reset')}</button></div>`) : html`<div class="row muted">${t('perm_none')}</div>`}
-    </div>`;
+    const d = this.data!;
+    const name = (k: string) => t(`perm_name_${k.replace(/-/g, '_')}` as StringKey);
+    const opt = (v: string) => ({ id: v, name: t(`perm_opt_${v}` as StringKey) });
+    const kinds = [...d.permissionKinds].sort((a, b) => Number(b.common) - Number(a.common));
+    const sites = new Map<string, { permission: string; decision: string }[]>();
+    for (const p of d.permissions) {
+      if (!sites.has(p.origin)) sites.set(p.origin, []);
+      sites.get(p.origin)!.push(p);
+    }
+    const apply = async (method: string, payload: unknown) => (this.data = { ...d, ...(await this.invoke<Data>(method, payload)) });
+    return html`
+      <div class="card" style="margin-top:16px">
+        <div class="section"><h2>${t('set_perm_defaults')}</h2><div class="desc">${t('set_perm_defaults_desc')}</div></div>
+        ${kinds.map((k) => html`<div class="row" style="padding:0 20px">${icon(k.icon, 15)}<div class="grow"><div class="title">${name(k.id)}</div></div>
+          <vz-select label=${name(k.id)} .value=${k.current} .options=${(k.chrome === 'allow' ? ['allow', 'block'] : k.chrome === 'block' ? ['block', 'ask'] : ['ask', 'block']).map(opt)}
+            @change=${(e: CustomEvent<string>) => void apply('setPermissionDefault', { kind: k.id, value: e.detail })}></vz-select></div>`)}
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="section"><h2>${t('perm_sites')}</h2></div>
+        ${sites.size
+          ? [...sites].map(([origin, list]) => html`<div class="section">
+              <div class="row"><div class="grow"><div class="title">${origin}</div></div><button class="btn ghost" @click=${() => void apply('resetSitePermissions', origin)}>${t('perm_reset_site')}</button></div>
+              ${list.map((p) => html`<div class="row"><div class="grow desc">${name(p.permission)}</div>
+                <vz-select label=${`${origin} · ${name(p.permission)}`} .value=${p.decision} .options=${[opt('allow'), opt('block'), { id: 'default', name: t('perm_default') }]}
+                  @change=${(e: CustomEvent<string>) => void apply('setSitePermission', { origin, kind: p.permission, value: e.detail })}></vz-select></div>`)}
+            </div>`)
+          : html`<div class="row muted" style="padding:0 20px 16px">${t('perm_none')}</div>`}
+      </div>`;
   }
 }
 customElements.define('vz-settings', VzSettings);

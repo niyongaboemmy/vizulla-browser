@@ -84,7 +84,7 @@ class VzTaskManager extends VzPage<Data> {
     const head = (key: 'task' | 'memory' | 'cpu', label: string, num = false): TemplateResult =>
       html`<div class=${num ? 'num' : ''}><button aria-sort=${this.sort === key ? (key === 'task' ? 'ascending' : 'descending') : nothing} @click=${() => (this.sort = key)}>${label}${this.sort === key ? icon('chevron-down', 12) : nothing}</button></div>`;
     return html`<div class="page">
-      <header class="page-head"><h1>${t('tm_title')}</h1></header>
+      <header class="page-head"><h1>${t('tm_title')}</h1><button class="btn" @click=${() => void this.invoke<Data>('sleepAll').then((x) => (this.data = x))}>${icon('moon', 14)} ${t('tm_sleep_all')}</button></header>
       <p class="lead">${t('tm_lead')}</p>
       <div class="table" role="table" aria-label=${t('tm_title')}>
         <div class="tr head" role="row">${head('task', t('tm_task'))}${head('memory', t('tm_memory'), true)}${head('cpu', t('tm_cpu'), true)}<div class="num">${t('tm_pid')}</div><div></div></div>

@@ -67,6 +67,11 @@ export async function startServer(): Promise<{ server: Server; base: string }> {
       res.end(readFileSync(join(ROOT, 'vizulla/test/data/sample.pdf')));
       return;
     }
+    if (path === '/echo-headers') {
+      res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+      res.end(JSON.stringify(req.headers));
+      return;
+    }
     if (req.method === 'POST') {
       let body = '';
       req.on('data', (c) => (body += c));

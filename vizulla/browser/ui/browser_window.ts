@@ -134,6 +134,7 @@ export class BrowserWindowController extends EventEmitter {
     if (profile.isPrivate && prefs.get('privacy.privateCaptureProtection')) this.win.setContentProtection(true);
     this.chrome.webContents.on('did-finish-load', () => {
       this.chromeReady = true;
+      this.lastState = ''; // a (re)loaded chrome UI needs the full state
       this.pushState(true);
     });
     this.chrome.webContents.on('render-process-gone', () => {
@@ -655,6 +656,7 @@ export class BrowserWindowController extends EventEmitter {
       lastActive: m.lastActive,
       blocked: tab.wc ? this.profile.shields.blockedCount(tab.wc.id) : 0,
       passwords: this.profile.isPrivate ? { logins: 0, form: false } : this.app.passwords.status(tab),
+      inUse: tab.wc ? this.profile.permissions.usedBy(tab.wc.id) : [],
       ...i,
       url: logicalUrl(tab.url),
       displayUrl: shown,
@@ -716,8 +718,15 @@ export class BrowserWindowController extends EventEmitter {
     }, 16);
   }
 
+  private lastState = '';
+
   private sendState(): void {
-    emitTo(this.chrome.webContents, 'Shell', 'state', this.state());
+    // Many tab events change nothing visible (e.g. repeated loading pings): skip those.
+    const state = this.state();
+    const json = JSON.stringify(state);
+    if (json === this.lastState) return;
+    this.lastState = json;
+    emitTo(this.chrome.webContents, 'Shell', 'state', state);
     // The OS window title follows the active tab (Window menu, Mission Control, taskbar).
     const title = this.activeTab()?.title;
     const many = this.app.profiles.list().length > 1;

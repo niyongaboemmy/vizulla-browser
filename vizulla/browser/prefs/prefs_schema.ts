@@ -29,6 +29,8 @@ export interface Prefs {
   /** Ads are blocked by default (Vizulla is ad-free); off shows ads everywhere, trackers stay blocked. */
   /** Search suggestions from the search engine while typing (never in private windows). */
   'search.suggestions': boolean;
+  /** Settings → Permissions: the default per capability (ask / allow / block), over Chrome's. */
+  'permissions.defaults': Record<string, 'ask' | 'allow' | 'block'>;
   /** Local MCP server for AI coding tools (off by default). */
   'dev.mcp': boolean;
   'dev.mcpToken': string;
@@ -56,6 +58,10 @@ export interface Prefs {
   'shields.dohProvider': string;
   'shields.fingerprinting': 'off' | 'standard' | 'strict';
   'shields.cookieBanners': boolean;
+  /** Strip click-tracking parameters (utm_*, fbclid, gclid…) and skip redirect hops before a page loads. */
+  'shields.cleanLinks': boolean;
+  /** WebRTC can't reveal local or VPN-hidden IP addresses. */
+  'shields.webrtcProtection': boolean;
   'ai.mode': AiMode;
   'ai.provider': ProviderId;
   'ai.models': Partial<Record<ProviderId, string>>;
@@ -75,6 +81,10 @@ export interface Prefs {
   'privacy.lockPrivate': boolean;
   'privacy.crashReports': boolean;
   'privacy.logRetentionDays': number;
+  /** Global Privacy Control: tell every site not to sell or share your data (Sec-GPC: 1). */
+  'privacy.gpc': boolean;
+  /** Delete cookies, site data and cache when Vizulla quits (history and passwords stay). */
+  'privacy.clearOnExit': boolean;
   'onboarding.completed': boolean;
   'agent.testerOptIn': boolean;
   'agent.grantMinutes': number;
@@ -109,6 +119,7 @@ export const DEFAULT_PREFS: Prefs = {
   'passwords.offerToSave': true,
   'passwords.neverSave': [],
   'search.suggestions': true,
+  'permissions.defaults': {},
   'dev.mcp': false,
   'dev.mcpToken': '',
   'dev.mcpPort': 39457,
@@ -131,6 +142,8 @@ export const DEFAULT_PREFS: Prefs = {
   'shields.dohProvider': 'https://cloudflare-dns.com/dns-query',
   'shields.fingerprinting': 'standard',
   'shields.cookieBanners': true,
+  'shields.cleanLinks': true,
+  'shields.webrtcProtection': true,
   'ai.mode': 'local',
   'ai.provider': 'local',
   'ai.models': {
@@ -155,6 +168,8 @@ export const DEFAULT_PREFS: Prefs = {
   'privacy.lockPrivate': false,
   'privacy.crashReports': false,
   'privacy.logRetentionDays': 30,
+  'privacy.gpc': true,
+  'privacy.clearOnExit': false,
   'onboarding.completed': false,
   'agent.testerOptIn': false,
   'agent.grantMinutes': 30,
@@ -195,6 +210,8 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'shields.doh': (v) => ['off', 'automatic', 'secure'].includes(v as string),
   'shields.fingerprinting': (v) => ['off', 'standard', 'strict'].includes(v as string),
   'shields.cookieBanners': (v) => typeof v === 'boolean',
+  'shields.cleanLinks': (v) => typeof v === 'boolean',
+  'shields.webrtcProtection': (v) => typeof v === 'boolean',
   'shields.blockAds': (v) => typeof v === 'boolean',
   'search.suggestions': (v) => typeof v === 'boolean',
   'dev.mcp': (v) => typeof v === 'boolean',
@@ -211,6 +228,8 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'privacy.privateCaptureProtection': (v) => typeof v === 'boolean',
   'privacy.lockPrivate': (v) => typeof v === 'boolean',
   'privacy.crashReports': (v) => typeof v === 'boolean',
+  'privacy.gpc': (v) => typeof v === 'boolean',
+  'privacy.clearOnExit': (v) => typeof v === 'boolean',
   'onboarding.completed': (v) => typeof v === 'boolean',
   'agent.testerOptIn': (v) => typeof v === 'boolean',
   'agent.grantMinutes': (v) => typeof v === 'number' && v >= 5 && v <= 120,

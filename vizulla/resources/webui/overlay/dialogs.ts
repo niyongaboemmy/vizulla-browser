@@ -1,6 +1,6 @@
 // Dialog registry for the overlay layer. Each dialog type renders browser-owned
 // UI and resolves with a JSON result. Phases add types (disclosure, agent plan…).
-import { html, type TemplateResult } from 'lit';
+import { html, nothing, type TemplateResult } from 'lit';
 import { icon } from '../shared/icons';
 import { t } from '@vz/common/i18n';
 import { SPACE_COLORS, SPACE_ICONS } from '@vz/common/types';
@@ -60,26 +60,68 @@ registerDialog('space-edit', (d, host) => {
     </div>`;
 });
 
+// Permission prompt (Chrome's 2024 model): allow while visiting, allow this time, never.
 registerDialog('permission', (d, host) => {
-  const draft = host.draft as { remember?: boolean };
-  draft.remember ??= true;
-  const kind = String(d.permission);
+  const kinds = (d.kinds as string[] | undefined) ?? [];
+  const who = d.embeddedIn ? t('perm_embedded', { origin: String(d.origin), top: String(d.embeddedIn) }) : String(d.origin);
+  const detail = d.detail ? String(d.detail) : '';
+  const fileLine = detail ? t(detail.startsWith('write:') ? 'perm_file_write' : 'perm_file_read', { path: detail.slice(detail.indexOf(':') + 1) }) : '';
   return html`
-    <div class="perm-head">${icon(permIcon(kind), 22)}<div><h2 id="dlg-title">${t('perm_title', { origin: String(d.origin) })}</h2>
-      <p class="muted">${t(`perm_${kind.replace(/-/g, '_')}` as never) || kind}</p></div></div>
-    <label class="check"><input type="checkbox" .checked=${draft.remember} @change=${(e: Event) => (draft.remember = (e.target as HTMLInputElement).checked)} /> ${t('perm_remember')}</label>
+    <h2 id="dlg-title" class="perm-title">${t('perm_title', { origin: who })}</h2>
+    <ul class="perm-asks">${kinds.map((k) => html`<li>${icon(permIcon(k), 18)}<span>${k === 'file-system' && fileLine ? fileLine : t(`perm_ask_${k.replace(/-/g, '_')}` as never)}</span></li>`)}</ul>
+    <div class="perm-actions">
+      <button class="btn primary" autofocus @click=${() => host.resolve({ answer: 'allow-always' })}>${t('perm_allow_visit')}</button>
+      <button class="btn" @click=${() => host.resolve({ answer: 'allow-once' })}>${t('perm_allow_once')}</button>
+      <button class="btn" @click=${() => host.resolve({ answer: 'block' })}>${t('perm_never')}</button>
+    </div>`;
+});
+
+// Device chooser (WebUSB, Web Serial, WebHID, Web Bluetooth): the site gets only the chosen device.
+registerDialog('device-chooser', (d, host) => {
+  const draft = host.draft as { id?: string };
+  const devices = (d.devices as { id: string; name: string }[] | undefined) ?? [];
+  draft.id ??= devices[0]?.id;
+  return html`
+    <div class="perm-head">${icon('cpu', 22)}<div><h2 id="dlg-title">${t('dev_title', { origin: String(d.origin) })}</h2>
+      <p class="muted">${t(`dev_choose_${String(d.kind)}` as never)}</p></div></div>
+    ${devices.length
+      ? html`<div class="dev-list" role="radiogroup" aria-label=${t(`dev_choose_${String(d.kind)}` as never)}>${devices.map((x) => html`<label class="dev ${draft.id === x.id ? 'on' : ''}">
+          <input type="radio" name="dev" .checked=${draft.id === x.id} @change=${() => ((draft.id = x.id), host.requestUpdate())} />${icon('cpu', 15)}<span>${x.name}</span></label>`)}</div>`
+      : html`<p class="muted">${t('dev_none')}</p>`}
+    <div class="actions"><span style="flex:1"></span>
+      <button class="btn" @click=${() => host.resolve(null)}>${t('action_cancel')}</button>
+      <button class="btn primary" ?disabled=${!draft.id} @click=${() => host.resolve({ id: draft.id })}>${t('dev_connect')}</button></div>`;
+});
+
+// Screen sharing: entire screens, windows and tabs, with live thumbnails.
+registerDialog('display-picker', (d, host) => {
+  type Src = { id: string; name: string; kind: 'screen' | 'window'; thumb: string | null; icon: string | null };
+  const draft = host.draft as { id?: string; tab?: 'screen' | 'window' | 'tab'; audio?: boolean };
+  const sources = (d.sources as Src[] | undefined) ?? [];
+  const tabs = (d.tabs as { id: string; name: string; favicon: string | null }[] | undefined) ?? [];
+  draft.tab ??= tabs.length ? 'tab' : 'screen';
+  const shown = draft.tab === 'tab' ? [] : sources.filter((x) => x.kind === draft.tab);
+  const seg = (id: 'tab' | 'window' | 'screen', label: string, n: number) =>
+    html`<button role="tab" aria-selected=${draft.tab === id} ?disabled=${!n} @click=${() => ((draft.tab = id), (draft.id = undefined), host.requestUpdate())}>${label}</button>`;
+  return html`
+    <h2 id="dlg-title">${t('dp_title', { origin: String(d.origin) })}</h2>
+    <div class="dp-tabs" role="tablist">${seg('tab', t('dp_tabs'), tabs.length)}${seg('window', t('dp_windows'), sources.filter((x) => x.kind === 'window').length)}${seg('screen', t('dp_screens'), sources.filter((x) => x.kind === 'screen').length)}</div>
+    ${draft.tab === 'tab'
+      ? html`<div class="dp-tablist" role="listbox">${tabs.map((x) => html`<button role="option" aria-selected=${draft.id === x.id} class="dp-tab ${draft.id === x.id ? 'on' : ''}" @click=${() => ((draft.id = x.id), host.requestUpdate())}>
+          ${x.favicon ? html`<img src=${x.favicon} alt="" />` : icon('globe', 14)}<span>${x.name}</span></button>`)}</div>`
+      : html`<div class="dp-grid" role="listbox">${shown.map((x) => html`<button role="option" aria-selected=${draft.id === x.id} class="dp-src ${draft.id === x.id ? 'on' : ''}" @click=${() => ((draft.id = x.id), host.requestUpdate())}>
+          <span class="dp-thumb">${x.thumb ? html`<img src=${x.thumb} alt="" />` : icon('columns', 24)}</span>
+          <span class="dp-name">${x.icon ? html`<img src=${x.icon} alt="" />` : nothing}${x.name}</span></button>`)}</div>`}
     <div class="actions">
-      <button class="btn" @click=${() => host.resolve({ allow: false, remember: draft.remember })}>${t('perm_block')}</button>
-      <button class="btn primary" @click=${() => host.resolve({ allow: true, remember: draft.remember })}>${t('perm_allow')}</button>
+      ${d.audio || draft.tab === 'tab' ? html`<label class="check"><input type="checkbox" .checked=${!!draft.audio} @change=${(e: Event) => (draft.audio = (e.target as HTMLInputElement).checked)} /> ${t('dp_audio')}</label>` : nothing}
+      <span style="flex:1"></span>
+      <button class="btn" @click=${() => host.resolve(null)}>${t('action_cancel')}</button>
+      <button class="btn primary" ?disabled=${!draft.id} @click=${() => host.resolve({ id: draft.id, audio: !!draft.audio })}>${t('dp_share')}</button>
     </div>`;
 });
 
 function permIcon(p: string): string {
-  if (p.includes('camera')) return 'eye';
-  if (p.includes('microphone')) return 'volume';
-  if (p === 'geolocation') return 'globe';
-  if (p === 'notifications') return 'info';
-  return 'key';
+  return ({ camera: 'eye', microphone: 'volume', geolocation: 'globe', notifications: 'info', 'display-capture': 'columns', 'clipboard-read': 'copy', 'file-system': 'folder', midi: 'music', 'local-network': 'globe', 'local-fonts': 'edit', 'window-management': 'columns' } as Record<string, string>)[p] ?? 'key';
 }
 
 // Save or update a login after a sign-in (passwords). The password itself never

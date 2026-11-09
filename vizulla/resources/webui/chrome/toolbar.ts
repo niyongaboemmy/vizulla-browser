@@ -41,6 +41,9 @@ export class VzToolbar extends LitElement {
       .omni:hover { background: var(--vz-omnibox-hover); }
       .omni:focus-within { background: var(--vz-toolbar); box-shadow: 0 0 0 2px var(--vz-accent); }
       .sec { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--vz-text-2); flex: none; }
+      button.sec { border: 0; background: transparent; cursor: pointer; transition: background var(--vz-dur); }
+      button.sec:hover { background: var(--vz-surface-hover); }
+      button.sec.live { color: #fff; background: #dc2626; animation: pop 220ms var(--vz-ease); }
       .sec.insecure, .sec.dangerous { color: var(--vz-danger); background: color-mix(in srgb, var(--vz-danger) 12%, transparent); width: auto; padding: 0 8px; border-radius: 999px; gap: 4px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; }
       .addr { all: unset; flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; cursor: text; white-space: nowrap; overflow: hidden; font-size: 14px; letter-spacing: .005em; }
       .addr:focus-visible { outline: none; }
@@ -114,7 +117,12 @@ export class VzToolbar extends LitElement {
         @click=${() => tab && (tab.loading ? shell.stop(tab.id) : shell.reload(tab.id))}>${icon(tab?.loading ? 'x' : 'refresh', 16)}</button>
       ${compact && !this.rail ? html`<button class="icon-btn" aria-label=${t('cmd_tab_new')} title=${t('cmd_tab_new')} data-kbd=${mac ? '⌘T' : 'Ctrl+T'} @click=${() => shell.newTab()}>${icon('plus', 18)}</button>` : nothing}
       <div class="omni">
-        <span class="sec ${sec}" title=${t(`security_${sec}` as never)}>${icon(host ? securityIcon(sec) : 'search', 15, t(`security_${sec}` as never))}${sec === 'insecure' || sec === 'dangerous' ? html`<span>${t(`security_${sec}_short` as never)}</span>` : nothing}</span>
+        ${host && tab && /^https?:/.test(tab.url)
+          ? html`<button class="sec ${sec} ${tab.inUse.length ? 'live' : ''}" aria-label=${t('si_open')} title=${t(`security_${sec}` as never)} @click=${(e: MouseEvent) => {
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              void shell.openSiteInfo({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+            }}>${tab.inUse.length ? icon(tab.inUse.includes('camera') ? 'eye' : tab.inUse.includes('microphone') ? 'volume' : tab.inUse.includes('display-capture') ? 'columns' : 'globe', 14) : icon(securityIcon(sec), 15)}${sec === 'insecure' || sec === 'dangerous' ? html`<span>${t(`security_${sec}_short` as never)}</span>` : nothing}</button>`
+          : html`<span class="sec ${sec}" title=${t(`security_${sec}` as never)}>${icon(host ? securityIcon(sec) : 'search', 15, t(`security_${sec}` as never))}</span>`}
         <button class="addr" title=${t('cb_address_label')} data-kbd=${mac ? '⌘L' : 'Ctrl+L'} @click=${(e: MouseEvent) => this.open(e)}>
           ${host ? html`<span class="host">${host}</span><span class="path">${path}</span>` : html`<span class="ph">${t('cb_placeholder')}</span>`}
         </button>

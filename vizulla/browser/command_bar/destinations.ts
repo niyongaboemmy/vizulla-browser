@@ -95,6 +95,7 @@ export const DESTINATIONS: Destination[] = [
   T('read-aloud', 'tools.readAloud', 'tool_read_aloud', 'volume', 'read aloud text to speech listen speak voice lire à voix haute soma kwa sauti'),
   T('pip', 'tools.pip', 'tool_pip', 'play', 'picture in picture pip floating video'),
   T('color-picker', 'tools.colorPicker', 'tool_color_picker', 'wand', 'color picker eyedropper colour hex pipette rangi'),
+  T('tech-stack', 'tools.techStack', 'tool_tech', 'code', 'technologies tech stack built with framework cms detect what is this site made with wappalyzer builtwith'),
   T('clear-site', 'tools.clearSiteData', 'tool_clear_site', 'trash', 'clear site data reset site cookies for this site effacer données du site'),
 ];
 

@@ -36,6 +36,8 @@ export interface TabInfo {
   blocked: number;
   /** Toolbar key button: saved logins for this origin, and whether the page has a password field. */
   passwords: { logins: number; form: boolean };
+  /** Capabilities the page is using right now (camera, microphone, geolocation, display-capture). */
+  inUse: string[];
   lastActive: number;
   isPdf: boolean;
   /** Set for tabs driven by the agent (Stage A: isolated session). */

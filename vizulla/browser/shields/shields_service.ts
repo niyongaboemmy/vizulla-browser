@@ -4,11 +4,12 @@ import { app, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isKnownTracker, ShieldsEngine, type RequestCategory } from '@vz/components/shields_engine/shields_engine';
+import { isKnownTracker, ShieldsEngine, type CheckResult, type RequestCategory } from '@vz/components/shields_engine/shields_engine';
 import { verifyBlob, type ListManifest } from '@vz/components/shields_engine/list_signature';
 import { siteOf } from '@vz/common/url';
 import type { PrefsService } from '../prefs/prefs_service';
 import { initiatorOf, type RequestPipeline } from '../net/request_pipeline';
+import { cleanUrl } from './link_privacy';
 
 export interface BlockedEvent {
   webContentsId: number;
@@ -111,6 +112,17 @@ export class ShieldsService extends EventEmitter {
   /** Installs request filtering, HTTPS-First, and third-party cookie blocking on a session. */
   install(pipeline: RequestPipeline): void {
     pipeline.addBeforeRequest({
+      name: 'clean-links',
+      priority: 5,
+      onBeforeRequest: (d) => {
+        if ((d.resourceType !== 'mainFrame' && d.resourceType !== 'subFrame') || !this.prefs.get('shields.cleanLinks') || !this.isSiteEnabled(d.url)) return null;
+        const clean = cleanUrl(d.url);
+        if (!clean) return null;
+        if (d.webContentsId !== undefined) this.count(d.webContentsId, 'trackers');
+        return { redirectURL: clean, reason: 'clean-links' };
+      },
+    });
+    pipeline.addBeforeRequest({
       name: 'https-first',
       priority: 10,
       onBeforeRequest: (d) => {
@@ -129,7 +141,8 @@ export class ShieldsService extends EventEmitter {
         if (!this.isEnabled || d.resourceType === 'mainFrame') return null;
         const pageUrl = initiatorOf(d);
         if (!pageUrl.startsWith('http') || !this.isSiteEnabled(pageUrl)) return null;
-        let r = this.engine.check(d.url, pageUrl, d.resourceType);
+        // Hyperlink auditing (<a ping>) and beacons to other sites exist only to track clicks.
+        let r: CheckResult = d.resourceType === 'ping' && isCrossSite(d.url, pageUrl) ? { block: true, category: 'trackers' } : this.engine.check(d.url, pageUrl, d.resourceType);
         // Strict mode: known tracking companies embedded by other sites are blocked even
         // when the filter lists miss them.
         if (!r.block && this.prefs.get('shields.aggressive') && isKnownTracker(d.url) && isCrossSite(d.url, pageUrl)) r = { block: true, category: 'trackers' };
@@ -137,15 +150,20 @@ export class ShieldsService extends EventEmitter {
         // Ads the user chose to see (everywhere, or on this site); trackers stay blocked.
         if (r.category === 'ads' && this.adsAllowed(pageUrl)) return null;
         if (d.webContentsId !== undefined) {
-          const c = this.counts.get(d.webContentsId) ?? { ads: 0, trackers: 0, other: 0 };
-          c[r.category]++;
-          this.counts.set(d.webContentsId, c);
+          this.count(d.webContentsId, r.category);
           this.emit('blocked', { webContentsId: d.webContentsId, url: d.url, pageUrl, category: r.category } satisfies BlockedEvent);
         }
         return r.redirect ? { redirectURL: r.redirect, reason: 'shields-redirect' } : { cancel: true, reason: 'shields' };
       },
     });
-    // Third-party cookies (SHD-04) are blocked natively (see app/main.ts), not per request.
+    // Third-party cookies (SHD-04) and Global Privacy Control are native Chromium features
+    // (see app/main.ts): no per-request header hooks.
+  }
+
+  private count(webContentsId: number, category: RequestCategory): void {
+    const c = this.counts.get(webContentsId) ?? { ads: 0, trackers: 0, other: 0 };
+    c[category]++;
+    this.counts.set(webContentsId, c);
   }
 
   /** HTTPS-First fallback: an upgraded navigation failed, so go back to HTTP and remember the host. */

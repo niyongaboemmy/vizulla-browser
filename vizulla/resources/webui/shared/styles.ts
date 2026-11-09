@@ -25,7 +25,7 @@ export const base = css`
   .btn.ghost:hover { background: var(--vz-surface-hover); }
   .btn[disabled] { opacity: .5; cursor: default; }
   .icon-btn {
-    display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+    display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: 50%;
     border: 0; background: transparent; color: var(--vz-text-2); cursor: pointer; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease);
   }
   .icon-btn:active:not([disabled]) { transform: scale(.92); }

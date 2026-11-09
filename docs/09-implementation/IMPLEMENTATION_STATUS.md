@@ -31,6 +31,15 @@ Verification: 862 unit tests (vitest), Go tests for the Gateway and sync server,
 | 4 R2 | `ai_runtime` and `memory_index` utility processes, model manager (signed manifests, hash checks), device profile, Memory (opt-in, encrypted, hybrid recall, deletion follows history), Notes, NL commands + Ask Settings, intent chips, AI tab grouping, E2EE sync (Go server), fingerprinting protection, cookie-banner reject, rw/sw drafts | `phase4_r2.e2e.ts` |
 | 5–6 R3 | Plan validator, deterministic Policy Enforcer (322-case model-free attack suite, 100% green), isolated agent session + egress filter, CDP actuator, heuristic + LLM planners, advisory injection detector, control bar, Esc kill switch, login-page stop, Action Log, build-staleness gating, Stage B confirmations (exact destination/fields, delayed arming), PII handles, egress content matching, session grants | `policy_enforcer.test.ts`, `phase5_6_agent.e2e.ts` |
 
+## 2c. Since 0.4.0
+
+| Area | Shipped |
+|------|---------|
+| Permissions | All 37 Chromium/Electron capabilities catalogued with Chrome's defaults (ask / allow / block), changeable per kind in Settings; camera and microphone separate; prompt with allow while visiting / allow this time / never; embargo after 3 dismissals (7 days); secure-context rule; device choosers for USB, serial, HID and Bluetooth with remembered grants; screen-sharing picker (screens, windows, tabs, audio where supported); file-editing prompts that are never remembered beyond the visit; in-use indicators in the tab and the address bar; site-info panel from the lock icon |
+| Site technologies | Tools → Site technologies: ~170 fingerprints (headers, cookies, meta, globals, scripts, resources, DOM, markup), versions and confidence, implied technologies, copyable report; runs only on demand |
+| Speed | Adaptive Memory Saver (sooner on battery or low memory), unchanged window state not resent, Task Manager "Put background tabs to sleep" |
+| Privacy & security | Clean Links (tracking parameters stripped, redirect hops skipped), Global Privacy Control on by default (native Chromium, no header hook), WebRTC IP-leak protection, cross-site pings blocked, Clear on exit (opt-in), Settings privacy checkup with one-click fix; tab close × centred (see [10-privacy-security-review.md](../10-privacy-security-review.md); `link_privacy.test.ts`, `phase16_privacy.e2e.ts`) |
+
 ## 2b. Since 0.3.5 (0.4.0, see PLAN_0.4.md)
 
 | Area | Shipped |

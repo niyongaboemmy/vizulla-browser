@@ -1,7 +1,7 @@
 {
   "name": "vizulla",
   "productName": "Vizulla",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Vizulla: a lightweight, AI-native browser on Chromium (Blink + V8).",
   "private": true,
   "main": "out/main/main.js",

@@ -56,6 +56,16 @@ export function taskRows(a: BrowserApp): { rows: TaskRow[]; asleep: number } {
   return { rows, asleep };
 }
 
+/** "Put background tabs to sleep": every tab that isn't visible, in every window. */
+export function sleepBackgroundTabs(a: BrowserApp): number {
+  let n = 0;
+  for (const w of a.windows) {
+    for (const tab of w.tabs.values()) if (w.discardTab(tab.id)) n++;
+    w.pushState();
+  }
+  return n;
+}
+
 /** Puts every tab hosted by a renderer process to sleep (or closes the process if none). */
 export function endProcess(a: BrowserApp, pid: number): void {
   for (const w of a.windows) {

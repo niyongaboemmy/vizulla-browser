@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import type { BrowserApp } from '../browser_app';
 import type { BrowserWindowController } from '../ui/browser_window';
 import { t } from '@vz/common/i18n';
+import { detect, pageProbe, probeTargets, type Detected } from './tech/detect';
 
 const safeName = (s: string) => s.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Vizulla';
 const stamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '.');
@@ -30,6 +31,7 @@ export class ToolsService {
     c.set('tools.pip', (w) => void this.pip(w));
     c.set('tools.colorPicker', (w) => void this.colorPicker(w));
     c.set('tools.clearSiteData', (w) => void this.clearSiteData(w));
+    c.set('tools.techStack', (w) => void this.techStack(w));
   }
 
   /** Where the toolbar's Tools button was, so the menu opens under it. */
@@ -162,6 +164,39 @@ export class ToolsService {
     clipboard.writeText(hex);
     w.toast(t('tool_color_copied', { color: hex }));
     return hex;
+  }
+
+  /**
+   * Site technologies: probes the page (globals, markup, scripts, resources), re-reads
+   * the page's response headers and its cookie names, and matches fingerprints. Runs
+   * only when asked: nothing is inspected while browsing.
+   */
+  async techStack(w: BrowserWindowController): Promise<Detected[] | null> {
+    const tab = w.activeTab();
+    const wc = tab?.wc;
+    if (!tab || !wc || !/^https?:/.test(tab.url)) return null;
+    const url = tab.url;
+    const host = new URL(url).host;
+    const anchor = this.anchors.get(w) ?? { x: w.win.getContentBounds().width - 400, y: 8, width: 32, height: 32 };
+    w.overlay.show({ kind: 'tech', anchor, host, url, result: null });
+    const ses = w.profile.session;
+    const headers = async (): Promise<Record<string, string>> => {
+      try {
+        const res = await ses.fetch(url, { headers: { accept: 'text/html' }, signal: AbortSignal.timeout(6000), cache: 'no-store' });
+        void res.body?.cancel().catch(() => undefined);
+        return Object.fromEntries(res.headers.entries());
+      } catch {
+        return {};
+      }
+    };
+    const [probe, hdrs, cookies] = await Promise.all([
+      wc.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify(probeTargets())})`).catch(() => null) as Promise<ReturnType<typeof pageProbe> | null>,
+      headers(),
+      ses.cookies.get({ url }).then((cs) => cs.map((c) => c.name)).catch(() => [] as string[]),
+    ]);
+    const result = detect({ url, headers: hdrs, cookies, meta: probe?.meta ?? {}, js: probe?.js ?? {}, scripts: probe?.scripts ?? [], resources: probe?.resources ?? [], dom: probe?.dom ?? {}, html: probe?.html ?? '' });
+    if (w.activeTab() === tab) w.overlay.show({ kind: 'tech', anchor, host, url, result });
+    return result;
   }
 
   async clearSiteData(w: BrowserWindowController): Promise<void> {

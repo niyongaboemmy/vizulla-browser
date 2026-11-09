@@ -9,6 +9,8 @@ import { emitTo } from './ipc_router';
 export type OverlaySurface =
   | { kind: 'command-bar'; mode: 'palette' | 'address' | 'tab-search' | 'ask'; anchor?: { x: number; y: number; width: number; height: number }; initial: string; newTab: boolean }
   | { kind: 'shields'; anchor: { x: number; y: number; width: number; height: number }; status: unknown }
+  | { kind: 'tech'; anchor: { x: number; y: number; width: number; height: number }; host: string; url: string; result: unknown[] | null }
+  | { kind: 'site-info'; anchor: { x: number; y: number; width: number; height: number }; info: unknown }
   | { kind: 'tools'; anchor: { x: number; y: number; width: number; height: number }; web: boolean }
   | { kind: 'app-menu'; anchor: { x: number; y: number; width: number; height: number }; menu: unknown }
   | { kind: 'extensions'; anchor: { x: number; y: number; width: number; height: number }; items: unknown[] }

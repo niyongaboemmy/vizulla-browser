@@ -34,7 +34,7 @@ export class VzTabstrip extends LitElement {
       /* Every control shares the tabs' centre line: 23px down a 40px strip (34px tabs on the bottom edge). */
       .lead, .trail { display: flex; align-items: flex-end; gap: 2px; height: 100%; padding-bottom: 3px; -webkit-app-region: no-drag; flex: none; }
       .lead { padding-left: var(--traffic, 0); padding-right: 6px; }
-      .dot { width: 24px; height: 24px; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .dot { width: 24px; height: 24px; padding: 0; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .dot:hover { background: var(--vz-tab-hover); color: var(--c); }
       .dot.on { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
       .dot:active { transform: scale(0.92); }
@@ -79,9 +79,12 @@ export class VzTabstrip extends LitElement {
       .fav img, .fav .vz-icon { width: 16px; height: 16px; border-radius: 3px; }
       .fav.loading::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--vz-accent); border-right-color: transparent; animation: vz-spin .8s linear infinite; }
       .fav.asleep { opacity: .5; }
-      .x { width: 20px; height: 20px; flex: none; border-radius: 50%; border: 0; background: transparent; color: var(--vz-text-2); display: grid; place-items: center; cursor: pointer; opacity: 0; margin-right: 6px; transition: opacity var(--vz-dur), background var(--vz-dur); -webkit-app-region: no-drag; }
+      /* padding: 0 matters: the default button padding (6px a side) would leave 8px for the 12px glyph and push it off-centre.
+         8px right margin puts the glyph 12px from the tab edge, mirroring the favicon on the left. */
+      .x { width: 20px; height: 20px; padding: 0; flex: none; border-radius: 50%; border: 0; background: transparent; color: var(--vz-text-2); display: grid; place-items: center; cursor: pointer; opacity: 0; margin-right: 8px; transition: opacity var(--vz-dur), background var(--vz-dur); -webkit-app-region: no-drag; }
       .tab:hover .x, .tab.active .x { opacity: 1; }
       .x:hover { background: var(--vz-surface-active); color: var(--vz-text); }
+      .live { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: #dc2626; color: #fff; flex: none; animation: vz-rise 200ms var(--vz-ease); }
       .audio { color: var(--vz-accent); display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; flex: none; transition: background var(--vz-dur); }
       .audio:hover { background: var(--vz-surface-active); }
       .group { -webkit-app-region: no-drag; align-self: center; flex: none; height: 22px; max-width: 120px; padding: 0 9px; margin: 0 4px 3px; border-radius: 999px; border: 0; cursor: pointer;
@@ -184,6 +187,7 @@ export class VzTabstrip extends LitElement {
           @click=${(e: MouseEvent) => this.sel.click(e, x.id, order, s.activeTabId) || shell.activateTab(x.id)}>
           <span class="fav ${x.loading ? 'loading' : ''} ${x.discarded ? 'asleep' : ''}">${favicon(x, 16)}</span>
           ${x.pinned ? nothing : html`<span class="title">${x.title}</span>`}
+          ${x.inUse?.length ? html`<span class="live" title=${t('si_in_use')} aria-label=${t('si_in_use')}>${icon(x.inUse.includes('camera') ? 'eye' : x.inUse.includes('display-capture') ? 'columns' : x.inUse.includes('microphone') ? 'volume' : 'globe', 11)}</span>` : nothing}
           ${x.audible || x.muted
             ? html`<span class="audio" role="button" tabindex="-1" title=${x.muted ? t('ctx_unmute') : t('ctx_mute')} aria-label=${x.muted ? t('ctx_unmute') : t('ctx_mute')}
                 @click=${(e: MouseEvent) => (e.stopPropagation(), shell.setMuted(x.id, !x.muted))}>${icon(x.muted ? 'volume-x' : 'volume', 13)}</span>`

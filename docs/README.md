@@ -22,6 +22,7 @@
 | 07 | [Roadmap & Architecture Decisions](07-roadmap-and-decisions.md) | Staged releases (R1/R2/R3), phased plan, open decisions, ADRs, risks, team and capacity. |
 | 08 | [Validation Plan](08-validation-plan.md) | Gates, foundation (fork) evaluation, technical spikes, user research, and the Chromium update & security process. |
 | 09 | [Implementation Plan](09-implementation/README.md) | For developers: the engineering handbook and phase-by-phase tasks (Phase 0 → Stage B agent), with Chromium integration points, interfaces, estimates, and done criteria. |
+| 10 | [Privacy & Security Review](10-privacy-security-review.md) | Browser threat model, comparison with Brave/Firefox/Safari/Chrome, what 0.4.1 ships (Clean Links, GPC, WebRTC protection, Clear on exit, privacy checkup), and what's next. |
 
 ## Release plan at a glance
 

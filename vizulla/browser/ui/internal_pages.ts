@@ -14,7 +14,8 @@ import { detectSources, importFrom, parsePasswordCsv, type ImportSource } from '
 import { generatePassword, type PasswordVault } from '../passwords/password_vault';
 import { PROFILE_COLORS } from '../profiles/profile_registry';
 import { BRANDING } from '@vz/app/branding';
-import { endProcess, taskRows } from './task_manager';
+import { endProcess, sleepBackgroundTabs, taskRows } from './task_manager';
+import { KINDS, kind } from '../permissions/catalog';
 
 const SHELL_HOSTS = new Set(['chrome', 'overlay']);
 
@@ -226,6 +227,10 @@ export class InternalPages {
         endProcess(a, v.int({ min: 1, max: 2 ** 31 }).parse(x, 'pid'));
         return taskRows(a);
       },
+      sleepAll: () => {
+        sleepBackgroundTabs(a);
+        return taskRows(a);
+      },
     });
 
     // ---- Extensions (EXT-01/02)
@@ -369,6 +374,26 @@ export class InternalPages {
         p.prefs.set('dev.mcpClients', p.prefs.get('dev.mcpClients').filter((c) => c !== name));
         return this.settingsData();
       },
+      setPermissionDefault: (payload) => {
+        const { kind: kindId, value } = v.object({ kind: v.string({ max: 40 }), value: v.string({ max: 8 }) }).parse(payload, 'default');
+        const k = kind(kindId);
+        if (!k?.configurable || !['ask', 'allow', 'block'].includes(value)) throw new Error('bad permission default');
+        const next = { ...p.prefs.get('permissions.defaults') };
+        if (value === k.default) delete next[kindId];
+        else next[kindId] = value as 'ask' | 'allow' | 'block';
+        p.prefs.set('permissions.defaults', next);
+        return this.settingsData();
+      },
+      setSitePermission: (payload) => {
+        const { origin, kind: kindId, value } = v.object({ origin: v.string({ max: 300 }), kind: v.string({ max: 40 }), value: v.string({ max: 8 }) }).parse(payload, 'site');
+        if (!kind(kindId) || !['allow', 'block', 'default'].includes(value)) throw new Error('bad permission');
+        p.permissions.set(origin, kindId, value === 'default' ? null : (value as 'allow' | 'block'));
+        return this.settingsData();
+      },
+      resetSitePermissions: (payload) => {
+        p.permissions.resetSite(v.string({ max: 300 }).parse(payload, 'origin'));
+        return this.settingsData();
+      },
       removeAdsAllowed: (payload) => {
         const site = v.string({ max: 255 }).parse(payload, 'site');
         p.prefs.set('shields.adsAllowedSites', p.prefs.get('shields.adsAllowedSites').filter((s) => s !== site));
@@ -504,8 +529,10 @@ export class InternalPages {
       locales: Object.entries(LOCALES).map(([id, name]) => ({ id, name })),
       providerKeys: Object.fromEntries(['anthropic', 'openai', 'google', 'openai-compatible', 'gateway'].map((id) => [id, keys?.hasKey(id) ?? false])),
       permissions: p.permissions.list(),
+      permissionKinds: KINDS.filter((k) => k.configurable).map((k) => ({ id: k.id, chrome: k.default, current: p.permissions.defaultFor(k.id), common: !!k.common, icon: k.icon })),
       passwords: this.vault?.count() ?? 0,
       shields: p.shields.status(-1, ''),
+      blocked30d: p.privacy.summary(30).blocked.total,
       isDefaultBrowser: app.isDefaultProtocolClient('https'),
       encryption: p.keys.constructor.name === 'KeychainKeyProvider' ? 'os-keychain' : 'memory',
       touchId: process.platform === 'darwin' && systemPreferences.canPromptTouchID(),

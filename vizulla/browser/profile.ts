@@ -88,7 +88,7 @@ export class Profile {
       privacy: new PrivacyLog(join(opts.dir, 'Privacy.db')),
       shields,
       downloads: new DownloadService(),
-      permissions: new SitePermissions(join(opts.dir, 'Permissions.json')),
+      permissions: new SitePermissions(join(opts.dir, 'Permissions.json'), () => prefs.get('permissions.defaults')),
       session: electronSession.defaultSession,
       parent: null,
     });
@@ -121,7 +121,7 @@ export class Profile {
       privacy: this.privacy,
       shields: this.shields,
       downloads: this.downloads,
-      permissions: new SitePermissions(null),
+      permissions: new SitePermissions(null, () => this.prefs.get('permissions.defaults')),
       session: electronSession.fromPartition(id, { cache: false }),
       parent: this,
     });

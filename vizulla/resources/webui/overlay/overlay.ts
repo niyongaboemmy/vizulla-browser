@@ -11,6 +11,7 @@ import { t } from '@vz/common/i18n';
 import type { CommandBarResult, Suggestion, WindowState } from '@vz/common/types';
 import { DIALOGS, type DialogHost } from './dialogs';
 import './dialogs_extra';
+import '../shared/select';
 
 const overlay = client(OverlayInterface);
 
@@ -18,11 +19,20 @@ type Surface =
   | { kind: 'command-bar'; mode: 'palette' | 'address' | 'tab-search' | 'ask'; anchor?: { x: number; y: number; width: number; height: number }; initial: string; newTab: boolean }
   | { kind: 'shields'; anchor: { x: number; y: number; width: number; height: number }; status: ShieldsStatus }
   | { kind: 'extensions'; anchor: { x: number; y: number; width: number; height: number }; items: unknown[] }
+  | { kind: 'site-info'; anchor: { x: number; y: number; width: number; height: number }; info: SiteInfo }
+  | { kind: 'tech'; anchor: { x: number; y: number; width: number; height: number }; host: string; url: string; result: Tech[] | null }
   | { kind: 'tools'; anchor: { x: number; y: number; width: number; height: number }; web: boolean }
   | { kind: 'app-menu'; anchor: { x: number; y: number; width: number; height: number }; menu: AppMenu }
   | { kind: 'dialog'; id: string; dialog: Record<string, unknown> & { type: string } };
 
 interface ShieldsStatus { enabled: boolean; siteEnabled: boolean; blockAds: boolean; adsAllowed: boolean; strict: boolean; site: string; blocked: { ads: number; trackers: number; other: number; total: number }; ruleSource: string }
+
+interface Tech { name: string; category: string; version: string | null; confidence: 'certain' | 'likely'; evidence: string[]; website?: string }
+const TECH_ICONS: Record<string, string> = { cms: 'newspaper', 'site-builder': 'grid', ecommerce: 'cart', 'meta-framework': 'layers', framework: 'code', ui: 'grid', css: 'grid', library: 'book', build: 'zap', language: 'code', backend: 'cpu', server: 'cpu', hosting: 'cloud', cdn: 'cloud', analytics: 'eye', 'tag-manager': 'command', advertising: 'eye', 'ab-testing': 'columns', consent: 'check', payments: 'key', auth: 'lock', security: 'shield', chat: 'send', video: 'play', maps: 'globe', search: 'search', monitoring: 'info', fonts: 'edit' };
+
+interface SiteInfo { origin: string; host: string; security: string; rows: { kind: string; setting: 'ask' | 'allow' | 'block'; isDefault: boolean; inUse: boolean; embargoed: boolean }[] }
+const PERM_ICONS: Record<string, string> = { camera: 'eye', microphone: 'volume', geolocation: 'globe', notifications: 'info', 'display-capture': 'columns', 'clipboard-read': 'copy', 'file-system': 'folder', usb: 'cpu', serial: 'cpu', hid: 'cpu', bluetooth: 'cpu', midi: 'music', 'local-network': 'globe', 'local-fonts': 'edit' };
+export const permName = (k: string) => t(`perm_name_${k.replace(/-/g, '_')}` as never);
 
 interface AppMenuItem { id: string; label: string; shortcut: string; enabled: boolean; sub: boolean }
 interface AppMenu { zoom: number; update: string | null; groups: AppMenuItem[][] }
@@ -40,6 +50,7 @@ const TOOLS: { id: string; icon: string; label: string; web: boolean }[] = [
   { id: 'view.reader', icon: 'book', label: 'cmd_reader', web: true },
   { id: 'tools.clearSiteData', icon: 'trash', label: 'tool_clear_site', web: true },
   { id: 'tools.copyMarkdown', icon: 'note', label: 'tool_copy_markdown', web: true },
+  { id: 'tools.techStack', icon: 'code', label: 'tool_tech', web: true },
   { id: 'page.taskManager', icon: 'cpu', label: 'cmd_task_manager', web: false },
 ];
 
@@ -135,6 +146,64 @@ export class VzOverlay extends LitElement {
       .qr-code { width: 220px; height: 220px; padding: 10px; border-radius: 18px; background: #fff; }
       .qr-code svg { width: 100%; height: 100%; display: block; }
       .qr-url { font-size: var(--vz-text-s); max-width: 340px; overflow-wrap: anywhere; }
+      .perm-title { margin: 0 0 10px; font-size: 16px; overflow-wrap: anywhere; }
+      .perm-asks { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+      .perm-asks li { display: flex; gap: 10px; align-items: center; font-size: var(--vz-text-m); }
+      .perm-asks li .vz-icon { color: var(--vz-accent); flex: none; }
+      .perm-actions { display: grid; gap: 8px; }
+      .perm-actions .btn { justify-content: center; }
+      .dev-list { display: grid; gap: 6px; max-height: 240px; overflow: auto; margin: 6px 0 4px; }
+      .dev { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--vz-border); cursor: pointer; }
+      .dev.on { border-color: var(--vz-accent); background: var(--vz-accent-soft); }
+      .dev input { position: absolute; opacity: 0; pointer-events: none; }
+      .dp-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--vz-surface-2); margin: 10px 0 12px; }
+      .dp-tabs button { border: 0; background: transparent; color: var(--vz-text-2); padding: 6px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: var(--vz-text-s); }
+      .dp-tabs button[aria-selected=true] { background: var(--vz-toolbar); color: var(--vz-text); font-weight: 600; }
+      .dp-tabs button:disabled { opacity: .4; cursor: default; }
+      .dp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; max-height: 340px; overflow: auto; padding: 2px; }
+      .dp-src { all: unset; display: grid; gap: 6px; padding: 8px; border-radius: 14px; border: 2px solid transparent; cursor: pointer; }
+      .dp-src:hover { background: var(--vz-surface-hover); }
+      .dp-src.on { border-color: var(--vz-accent); background: var(--vz-accent-soft); }
+      .dp-thumb { aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: var(--vz-surface-2); }
+      .dp-thumb img { width: 100%; height: 100%; object-fit: contain; }
+      .dp-name { display: flex; gap: 6px; align-items: center; font-size: var(--vz-text-s); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .dp-name img { width: 14px; height: 14px; }
+      .dp-tablist { display: grid; gap: 4px; max-height: 320px; overflow: auto; }
+      .dp-tab { all: unset; display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 10px; cursor: pointer; font-size: var(--vz-text-m); }
+      .dp-tab:hover { background: var(--vz-surface-hover); }
+      .dp-tab.on { background: var(--vz-accent-soft); outline: 2px solid var(--vz-accent); }
+      .dp-tab img { width: 16px; height: 16px; border-radius: 3px; }
+      .site-info { width: 360px; }
+      .site-info h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+      .conn { display: flex; gap: 6px; align-items: center; font-size: var(--vz-text-s); margin: 6px 0 12px; }
+      .conn.ok { color: var(--vz-ok); } .conn.bad { color: var(--vz-danger); }
+      .sec-title { font-size: 11px; font-weight: 700; color: var(--vz-text-3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+      .perm-rows { list-style: none; margin: 0 -6px; padding: 0; max-height: 320px; overflow: auto; }
+      .perm-rows li { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; }
+      .perm-rows li.in-use { background: color-mix(in srgb, #dc2626 10%, transparent); }
+      .perm-rows .pi { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--vz-surface-2); flex: none; }
+      .perm-rows .pn { flex: 1; min-width: 0; display: grid; font-size: var(--vz-text-m); }
+      .perm-rows .pn small { font-size: 11px; color: var(--vz-text-3); }
+      .perm-rows .live-tag { color: #dc2626 !important; font-weight: 600; }
+      .perm-rows vz-select { width: 132px; }
+      .site-info .links { display: flex; gap: 16px; flex-wrap: wrap; }
+      .site-info .links .link { display: inline-flex; align-items: center; gap: 6px; }
+      .tech { width: 400px; }
+      .tech .site { font-size: var(--vz-text-s); color: var(--vz-text-3); margin: 2px 0 10px; }
+      .tech-list { max-height: 420px; overflow: auto; margin: 0 -6px; padding: 0 6px; display: grid; gap: 10px; }
+      .tech-row { display: flex; gap: 10px; align-items: center; padding: 6px; border-radius: 10px; animation: rise 160ms var(--vz-ease) both; }
+      .tech-row:hover { background: var(--vz-surface-hover); }
+      .tech-mono { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--vz-accent-soft); color: var(--vz-accent); font-weight: 700; font-size: 12px; flex: none; }
+      .tn { flex: 1; min-width: 0; display: grid; font-size: var(--vz-text-m); }
+      .tn .ver { color: var(--vz-text-3); font-weight: 500; font-size: 12px; }
+      .tn small { font-size: 11px; color: var(--vz-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .conf { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; flex: none; }
+      .conf.certain { background: color-mix(in srgb, var(--vz-ok) 16%, transparent); color: var(--vz-ok); }
+      .conf.likely { background: var(--vz-surface-2); color: var(--vz-text-2); }
+      .tech-wait { display: flex; gap: 8px; align-items: center; }
+      .tech-wait .spin { display: inline-grid; animation: vz-spin 0.9s linear infinite; }
+      .tech .links { display: flex; gap: 16px; } .tech .links .link { display: inline-flex; align-items: center; gap: 6px; }
+      .tech-note { font-size: 11px; margin: 10px 0 0; }
       .tools { width: 340px; }
       .tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
       .tool { all: unset; display: grid; justify-items: center; gap: 6px; padding: 12px 6px; border-radius: 14px; text-align: center; font-size: 11.5px; cursor: pointer; color: var(--vz-text);
@@ -289,6 +358,8 @@ export class VzOverlay extends LitElement {
     if (s.kind === 'shields') return this.renderShields(s);
     if (s.kind === 'extensions') return this.renderExtensions(s);
     if (s.kind === 'tools') return this.renderTools(s);
+    if (s.kind === 'site-info') return this.renderSiteInfo(s);
+    if (s.kind === 'tech') return this.renderTech(s);
     if (s.kind === 'app-menu') return this.renderAppMenu(s);
     return this.renderDialog(s);
   }
@@ -335,6 +406,64 @@ export class VzOverlay extends LitElement {
           <span class="kbd" title=${t('cb_hint_move')}>↑↓</span><span class="kbd" title=${t('cb_hint_open')}>↵</span><span class="kbd" title=${t('cb_hint_new_tab')}>${mac ? '⌘' : 'Ctrl'}↵</span>
           <span style="flex:1"></span>
           <span class="kbd" title=${t('cb_hint_commands')}>&gt;</span><span class="kbd" title=${t('cb_hint_ask')}>?</span></div>
+      </div>`;
+  }
+
+  /** Site info (lock icon): connection security and this site's permissions, editable. */
+  private renderSiteInfo(s: Extract<Surface, { kind: 'site-info' }>): TemplateResult {
+    const i = s.info;
+    const left = Math.max(8, Math.min(window.innerWidth - 368, s.anchor.x - 8));
+    const update = (next: SiteInfo | null) => next && this.surface?.kind === 'site-info' && (this.surface = { ...this.surface, info: next });
+    const secure = i.security === 'secure' || i.security === 'internal';
+    return html`<div class="backdrop clear" @mousedown=${() => this.close()}></div>
+      <div class="pop site-info" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 8}px" role="dialog" aria-label=${t('si_open')}>
+        <h3>${i.host}</h3>
+        <div class="conn ${secure ? 'ok' : 'bad'}">${icon(secure ? 'lock' : 'alert', 14)} ${secure ? t('si_secure') : t('si_insecure')}</div>
+        <div class="sec-title">${t('si_permissions')}</div>
+        <ul class="perm-rows">${i.rows.map((r) => html`<li class=${r.inUse ? 'in-use' : ''}>
+          <span class="pi">${icon(PERM_ICONS[r.kind] ?? 'key', 15)}</span>
+          <span class="pn"><span>${permName(r.kind)}</span>${r.inUse ? html`<small class="live-tag">${t('si_in_use')}</small>` : r.embargoed ? html`<small>${t('si_embargo')}</small>` : nothing}</span>
+          <vz-select label=${permName(r.kind)} .value=${r.isDefault ? 'ask-default' : r.setting}
+            .options=${[{ id: 'ask-default', name: `${t('perm_opt_' + r.setting as never)} · ${t('perm_default')}` }, { id: 'allow', name: t('perm_opt_allow') }, { id: 'block', name: t('perm_opt_block') }]}
+            @change=${async (e: CustomEvent<string>) => update((await overlay.setSitePermission(r.kind, e.detail === 'ask-default' ? 'ask' : e.detail)) as SiteInfo | null)}></vz-select>
+        </li>`)}</ul>
+        <div class="links">
+          <button class="link" @click=${async () => update((await overlay.resetSitePermissions()) as SiteInfo | null)}>${icon('undo', 12)} ${t('si_reset')}</button>
+          <button class="link" @click=${() => (this.close(), void overlay.runCommand('page.settingsPermissions'))}>${icon('settings', 12)} ${t('si_settings')}</button>
+        </div>
+      </div>`;
+  }
+
+  /** Site technologies: what the page is built with, grouped, with versions and evidence. */
+  private renderTech(s: Extract<Surface, { kind: 'tech' }>): TemplateResult {
+    const left = Math.max(8, Math.min(window.innerWidth - 408, s.anchor.x + s.anchor.width - 400));
+    const groups = new Map<string, Tech[]>();
+    for (const x of s.result ?? []) {
+      if (!groups.has(x.category)) groups.set(x.category, []);
+      groups.get(x.category)!.push(x);
+    }
+    const report = () => [`# ${s.host}`, '', ...[...groups].flatMap(([c, list]) => [`## ${t(`tech_cat_${c.replace(/-/g, '_')}` as never)}`, ...list.map((x) => `- ${x.name}${x.version ? ` ${x.version}` : ''} (${x.confidence})`), ''])].join('\n');
+    return html`<div class="backdrop clear" @mousedown=${() => this.close()}></div>
+      <div class="pop tech" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 8}px" role="dialog" aria-label=${t('tool_tech')}>
+        <h3>${icon('code', 18)} ${t('tool_tech')}</h3>
+        <div class="site">${s.host}</div>
+        ${s.result === null
+          ? html`<p class="muted tech-wait" role="status"><span class="spin">${icon('loader', 16)}</span> ${t('tech_scanning')}</p>`
+          : !s.result.length
+            ? html`<p class="muted">${t('tech_none')}</p>`
+            : html`<div class="tech-list">${[...groups].map(([c, list]) => html`<section aria-label=${t(`tech_cat_${c.replace(/-/g, '_')}` as never)}>
+                <div class="sec-title">${icon(TECH_ICONS[c] ?? 'code', 12)} ${t(`tech_cat_${c.replace(/-/g, '_')}` as never)}</div>
+                ${list.map((x) => html`<div class="tech-row" title=${x.evidence.join('\n')}>
+                  <span class="tech-mono">${x.name.slice(0, 1)}</span>
+                  <span class="tn"><b>${x.name}</b>${x.version ? html` <span class="ver">${x.version}</span>` : nothing}<small>${x.evidence[0] ?? ''}</small></span>
+                  <span class="conf ${x.confidence}">${t(x.confidence === 'certain' ? 'tech_certain' : 'tech_likely')}</span>
+                </div>`)}
+              </section>`)}</div>`}
+        <div class="links">
+          ${s.result?.length ? html`<button class="link" @click=${() => void navigator.clipboard.writeText(report())}>${icon('copy', 12)} ${t('tech_copy')}</button>` : nothing}
+          <button class="link" @click=${() => (this.close(), void overlay.runCommand('tools.techStack'))}>${icon('refresh', 12)} ${t('tech_rescan')}</button>
+        </div>
+        <p class="muted tech-note">${t('tech_note')}</p>
       </div>`;
   }
 
@@ -448,7 +577,7 @@ export class VzOverlay extends LitElement {
       requestUpdate: () => this.requestUpdate(),
       draft: this.draft,
     };
-    const wide = ['agent-plan', 'agent-confirm', 'disclosure'].includes(s.dialog.type);
+    const wide = ['agent-plan', 'agent-confirm', 'disclosure', 'display-picker'].includes(s.dialog.type);
     return html`<div class="backdrop"></div>
       <div class="dlg ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
         <div class="browser-owned">${icon('shield', 12)} ${t('browser_owned_label')}</div>

@@ -93,6 +93,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'tab.moveToNewWindow', title: 'cmd_tab_move_window', category: 'window', keywords: 'detach tear off pop out separate' },
   // Internal pages
   { id: 'page.settings', title: 'cmd_settings', category: 'pages', accelerator: 'CmdOrCtrl+,', keywords: 'preferences options' },
+  { id: 'page.settingsPermissions', title: 'settings_permissions', category: 'pages', keywords: 'site permissions camera microphone location notifications allow block' },
   { id: 'page.settingsShields', title: 'ads_settings', category: 'pages', keywords: 'ads adblock block ads show ads trackers shields ad blocker privacy' },
   { id: 'profile.manage', title: 'profile_manage', category: 'window', keywords: 'profiles people accounts switch user' },
   { id: 'profile.add', title: 'profile_add', category: 'window', keywords: 'new profile person account user' },
@@ -106,6 +107,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'tools.readAloud', title: 'tool_read_aloud', category: 'tools', keywords: 'read aloud text to speech listen speak voice lire à voix haute soma kwa sauti' },
   { id: 'tools.pip', title: 'tool_pip', category: 'tools', keywords: 'picture in picture pip video floating video' },
   { id: 'tools.colorPicker', title: 'tool_color_picker', category: 'tools', keywords: 'color picker eyedropper colour hex pipette' },
+  { id: 'tools.techStack', title: 'tool_tech', category: 'tools', keywords: 'technologies tech stack built with framework wappalyzer builtwith detect cms what is this site made with' },
   { id: 'tools.clearSiteData', title: 'tool_clear_site', category: 'tools', destructive: true, keywords: 'clear site data cookies storage reset site effacer données du site' },
   { id: 'window.closePrivate', title: 'cmd_close_private', category: 'window', keywords: 'close private incognito windows' },
   { id: 'page.taskManager', title: 'cmd_task_manager', category: 'pages', accelerator: 'Shift+Escape', keywords: 'task manager memory cpu slow performance process heavy' },

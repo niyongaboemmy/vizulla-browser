@@ -2,7 +2,7 @@
 // Binds IPC interfaces, routes commands, builds the application menu with
 // Chrome-compatible accelerators, runs tab lifecycle timers, and exposes the
 // extension points later phases register into (panels, AI actions, agent).
-import { app, BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, type Session, session as electronSession, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, powerMonitor, type Session, session as electronSession, shell, systemPreferences } from 'electron';
 import { join } from 'node:path';
 import type { Profile } from './profile';
 import { BrowserWindowController, WEBUI_PRELOAD, type WindowInit } from './ui/browser_window';
@@ -12,7 +12,7 @@ import { installWebUIHandler } from './ui/webui_protocol';
 import { COMMANDS, findCommand, type CommandDef } from './command_bar/commands';
 import { resolveAccept, suggest, type SuggestSources } from './command_bar/suggest';
 import { setLocale, resolveLocale, t, type StringKey } from '@vz/common/i18n';
-import { displayUrl, searchUrl, setCustomEngine } from '@vz/common/url';
+import { displayUrl, searchUrl, securityStateOf, setCustomEngine } from '@vz/common/url';
 import type { AgentBarState, PanelKind, Suggestion } from '@vz/common/types';
 import { ALL_FEATURES } from './vizulla_features';
 import { InternalPages } from './ui/internal_pages';
@@ -29,6 +29,7 @@ import { ToolsService } from './tools/tools_service';
 import { hasGlass } from './ui/glass';
 import { installDevTools } from './tools/dev_tools';
 import { McpServer } from './mcp/mcp_server';
+import { permissionsUi } from './permissions/permissions_ui';
 
 export type CommandHandler = (w: BrowserWindowController, args?: Record<string, unknown>) => unknown;
 export type PageMethod = (payload: unknown, ctx: CallContext & { window: BrowserWindowController | null }) => unknown;
@@ -69,6 +70,8 @@ export class BrowserApp {
   readonly updates: UpdateService;
   readonly passwords: PasswordService;
   readonly extensions: ExtensionsService;
+  /** Permission prompts, device choosers and the screen picker (permissions_ui.ts). */
+  private readonly permissionsUi = permissionsUi(this);
   readonly tools: ToolsService;
   mcp!: McpServer;
   private readonly engineSuggest = new EngineSuggest();
@@ -110,7 +113,7 @@ export class BrowserApp {
     profile.spaces.on('archive-changed', () => this.broadcastState());
 
     for (const s of [this.chromeSession, profile.session]) installWebUIHandler(s, { outDir, dynamic: {} });
-    profile.permissions.install(profile.session, (wc, origin, permission) => this.promptPermission(wc, origin, permission));
+    profile.permissions.install(profile.session, this.permissionsUi);
     this.blockWebUINavigationFromWeb(profile.session);
 
     const testFeed = !!process.env.VZ_TEST && !!process.env.VZ_UPDATE_FEED;
@@ -172,7 +175,7 @@ export class BrowserApp {
       this.privateProfiles.add(profile);
       installWebUIHandler(profile.session, { outDir: this.outDir, dynamic: {} });
       this.applyWebLanguage(profile.session);
-      profile.permissions.install(profile.session, (wc, origin, permission) => this.promptPermission(wc, origin, permission));
+      profile.permissions.install(profile.session, this.permissionsUi);
     }
     const w = new BrowserWindowController(this, profile, opts.restore ?? null, opts.init);
     this.windows.add(w);
@@ -466,6 +469,7 @@ export class BrowserApp {
     });
     c.set('page.settings', page('vizulla://settings'));
     c.set('page.settingsShields', page('vizulla://settings/shields'));
+    c.set('page.settingsPermissions', page('vizulla://settings/permissions'));
     c.set('page.history', page('vizulla://history'));
     c.set('page.passwords', (w) => this.passwords.open(w));
     c.set('profile.manage', (w) => this.openProfiles(w));
@@ -597,6 +601,11 @@ export class BrowserApp {
           if (!tab?.wc) return;
           w.overlay.show({ kind: 'shields', anchor, status: w.profile.shields.status(tab.wc.id, tab.url) });
         },
+        openSiteInfo: (ctx, anchor) => {
+          const w = win(ctx);
+          const info = this.siteInfo(w);
+          if (info) w.overlay.show({ kind: 'site-info', anchor, info });
+        },
         openToolsMenu: (ctx, anchor) => {
           const w = win(ctx);
           this.tools.anchors.set(w, anchor);
@@ -674,6 +683,20 @@ export class BrowserApp {
           w.profile.shields.setAdsAllowed(tab.url, allow);
           tab.wc.reload();
           return w.profile.shields.status(tab.wc.id, tab.url);
+        },
+        setSitePermission: (ctx, kindId, value) => {
+          const w = win(ctx);
+          const info = this.siteInfo(w);
+          if (!info || !['allow', 'block', 'ask'].includes(value)) return info;
+          w.profile.permissions.set(info.origin, kindId, value === 'ask' ? null : (value as 'allow' | 'block'));
+          return this.siteInfo(w);
+        },
+        resetSitePermissions: (ctx) => {
+          const w = win(ctx);
+          const info = this.siteInfo(w);
+          if (info) w.profile.permissions.resetSite(info.origin);
+          w.activeTab()?.wc?.reload();
+          return this.siteInfo(w);
         },
         appMenuAction: (ctx, id) => {
           const w = win(ctx);
@@ -897,13 +920,6 @@ export class BrowserApp {
     );
   }
 
-  private async promptPermission(wc: Electron.WebContents, origin: string, permission: string): Promise<{ allow: boolean; remember: boolean }> {
-    const w = this.windowForSender(wc);
-    if (!w) return { allow: false, remember: false };
-    const r = await w.overlay.dialog<{ allow: boolean; remember: boolean } | null>({ type: 'permission', origin: displayUrl(origin), permission });
-    return r ?? { allow: false, remember: false };
-  }
-
   /** Web pages may not navigate or redirect into vizulla:// pages (only the browser opens them). */
   private blockWebUINavigationFromWeb(s: Session): void {
     app.on('web-contents-created', (_e, wc) => {
@@ -918,6 +934,14 @@ export class BrowserApp {
   }
 
   // ------------------------------------------------------------ menu & accelerators
+
+  /** The site-info panel (lock icon): connection security and this site's permissions. */
+  siteInfo(w: BrowserWindowController) {
+    const tab = w.activeTab();
+    if (!tab?.wc || !/^https?:/.test(tab.url)) return null;
+    const origin = new URL(tab.url).origin;
+    return { origin, host: new URL(origin).host, security: securityStateOf(tab.url, tab.certError), rows: w.profile.permissions.forSite(origin, tab.wc.id) };
+  }
 
   /** The ⋮ menu (glass, in the overlay): Chrome's layout with Vizulla's tools. */
   appMenuModel(w: BrowserWindowController) {
@@ -997,8 +1021,12 @@ export class BrowserApp {
     // Memory Saver: discard background tabs idle longer than the threshold (TAB-07).
     this.timers.push(
       setInterval(() => {
-        const mins = this.profile.prefs.get('tabs.memorySaverMinutes');
-        if (!mins) return;
+        const base = this.profile.prefs.get('tabs.memorySaverMinutes');
+        if (!base) return;
+        // Adaptive: sooner on battery, much sooner when the computer is short of memory.
+        const mem = process.getSystemMemoryInfo();
+        const low = mem.total > 0 && mem.free / mem.total < 0.05;
+        const mins = low ? Math.min(base, 5) : powerMonitor.isOnBatteryPower() ? Math.min(base, 15) : base;
         const exempt = new Set(this.profile.prefs.get('tabs.discardExemptSites'));
         const now = Date.now();
         for (const w of this.windows) {
@@ -1056,6 +1084,17 @@ export class BrowserApp {
     if (this.quitting) return;
     this.quitting = true;
     for (const w of this.windows) w.saveNow();
+  }
+
+  /**
+   * Clear on exit: cookies, site storage and cache go; history, passwords and
+   * extensions' own data stay. Capped so a stuck remover never blocks quitting.
+   */
+  async clearSiteData(): Promise<void> {
+    const s = this.profile.session;
+    const excludeOrigins = s.extensions.getAllExtensions().map((x) => `chrome-extension://${x.id}`);
+    const work = s.clearData({ dataTypes: ['cache', 'cookies', 'fileSystems', 'indexedDB', 'localStorage', 'serviceWorkers', 'webSQL', 'backgroundFetch'], excludeOrigins });
+    await Promise.race([work.catch((e) => console.warn('[vz] clear on exit failed', e)), new Promise((r) => setTimeout(r, 4000))]);
   }
 
   /** Opens a URL in a new tab of the focused window. */

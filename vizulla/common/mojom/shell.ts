@@ -55,6 +55,7 @@ export const ShellInterface = defineInterface('Shell', {
   openShieldsPanel: [rect],
   openExtensionsMenu: [rect],
   openToolsMenu: [rect],
+  openSiteInfo: [rect],
   openAppMenu: [rect],
   windowControl: [v.literal('minimize', 'maximize', 'close')],
   agentControl: [v.literal('pause', 'resume', 'takeover', 'stop')],
@@ -77,6 +78,9 @@ export const OverlayInterface = defineInterface('Overlay', {
   extensionMenu: [v.string({ max: 64 }), v.string({ max: 16 })],
   // ⋮ menu: run an item; zoom keeps the menu open and returns the updated menu
   appMenuAction: [v.string({ max: 64 })],
+  // Site info panel: set one permission for the current site (ask / allow / block), or reset all
+  setSitePermission: [v.string({ max: 40 }), v.string({ max: 8 })],
+  resetSitePermissions: [],
 });
 
 /** Generic page handler for vizulla:// pages: each method is host-checked in the browser. */
