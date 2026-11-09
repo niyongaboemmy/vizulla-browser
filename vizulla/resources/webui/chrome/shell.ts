@@ -108,12 +108,11 @@ export class VzShell extends LitElement {
       this.lastLocale = s.locale;
     }
     applyTheme(s.theme, s.accent, s.density);
-    // macOS: a slightly translucent frame lets the window vibrancy show through (glass).
     // macOS: the frame and toolbar are translucent so the window's vibrancy shows through (glass).
     if (s.platform.startsWith('darwin') && s.theme !== 'high-contrast') {
       const root = document.documentElement.style;
-      root.setProperty('--vz-frame-bg', 'color-mix(in srgb, var(--vz-frame) 62%, transparent)');
-      root.setProperty('--vz-toolbar-bg', 'color-mix(in srgb, var(--vz-toolbar) 80%, transparent)');
+      root.setProperty('--vz-frame-bg', 'color-mix(in srgb, var(--vz-frame) 45%, transparent)');
+      root.setProperty('--vz-toolbar-bg', 'color-mix(in srgb, var(--vz-toolbar) 70%, transparent)');
     }
     this.state = s;
     this.setAttribute('layout', s.layout);

@@ -272,3 +272,38 @@ test('tab strip: icons, close button, "+" and tab search share one centre line',
   });
   for (const y of centres) expect(Math.abs(y - centres[0]!)).toBeLessThanOrEqual(0.5);
 });
+
+test('many tabs: the current tab stays whole beside "+", tab search shows the count, widths hold while closing', async () => {
+  h = await launch();
+  const chrome = await h.chrome();
+  await inMain(h, (vz, b) => {
+    const w = vz.focused();
+    w.win.setBounds({ width: 1200, height: 700 });
+    for (let i = 0; i < 30; i++) w.loadUrl(null, `${b}/?${i}`, { newTab: true });
+  }, h.base);
+  const strip = chrome.locator('vz-tabstrip');
+  await expect(strip.getByRole('tab')).toHaveCount(31);
+  await expect(strip.locator('.search.counted .count')).toHaveText('31');
+  const rects = () => chrome.evaluate(() => {
+    const ts = document.querySelector('vz-shell')!.shadowRoot!.querySelector('vz-tabstrip')!.shadowRoot!;
+    const r = (q: string) => ts.querySelector(q)!.getBoundingClientRect();
+    return { active: r('.tab.active').width, x: r('.tab.active .x').right, add: r('.add').left, tab: r('.tab:not(.active):not(.pinned)').width };
+  });
+  await expect.poll(async () => { const m = await rects(); return m.x <= m.add; }).toBe(true);
+  expect((await rects()).active).toBeGreaterThanOrEqual(104);
+
+  // With fewer tabs (each wide enough for its ×), close one: the rest keep their width
+  // while the pointer stays in the strip, so the next × lands under it.
+  await inMain(h, (vz) => { const w = vz.focused(); for (const id of w.model.all().map((t: { id: number }) => t.id).slice(0, 23)) w.closeTab(id); });
+  await expect(strip.getByRole('tab')).toHaveCount(8);
+  await expect(strip.locator('.search.counted')).toHaveCount(0);
+  const before = (await rects()).tab;
+  const tab = strip.locator('.tab:not(.active)').nth(2);
+  await tab.hover();
+  await tab.locator('.x').click();
+  await expect(strip.getByRole('tab')).toHaveCount(7);
+  expect(Math.abs((await rects()).tab - before)).toBeLessThanOrEqual(1);
+  await expect(strip.locator('.tabs.frozen')).toHaveCount(1);
+  await chrome.mouse.move(600, 400);
+  await expect(strip.locator('.tabs.frozen')).toHaveCount(0);
+});

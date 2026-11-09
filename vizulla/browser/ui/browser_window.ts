@@ -86,7 +86,8 @@ export class BrowserWindowController extends EventEmitter {
       minHeight: 360,
       show: false,
       title: profile.isPrivate ? 'Vizulla — Private' : 'Vizulla',
-      backgroundColor: windowBackground(this.resolvedTheme()),
+      // macOS: transparent, so the window's vibrancy (frosted glass) shows through the translucent chrome.
+      backgroundColor: isMac ? '#00000000' : windowBackground(this.resolvedTheme()),
       ...(isMac
         ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'sidebar', visualEffectState: 'followWindow' }
         : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#eef1f6' : '#0f172a', height: 40 } }),

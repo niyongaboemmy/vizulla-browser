@@ -15,9 +15,14 @@ import { favicon } from './common';
 import { TabSelection, draggedTabIds, endTabDrag, isTabDrag, startTabDrag } from './tab_selection';
 
 export class VzTabstrip extends LitElement {
-  static override properties = { state: { attribute: false }, dragOver: { state: true } };
+  static override properties = { state: { attribute: false }, dragOver: { state: true }, edges: { state: true }, frozen: { state: true } };
   state!: WindowState;
   dragOver: number | null = null;
+  /** Hidden tabs to the left / right of an overflowing strip (edge fades, tab count). */
+  edges = { left: false, right: false };
+  /** Tab width held while closing tabs with the pointer in the strip (as in Chrome). */
+  frozen: number | null = null;
+  private readonly ro = new ResizeObserver(() => this.measure());
   private dragId: number | null = null;
   private dragIds: number[] = [];
   private readonly sel = new TabSelection(this);
@@ -35,7 +40,11 @@ export class VzTabstrip extends LitElement {
       .dot:active { transform: scale(0.92); }
       /* Tabs shrink to icons, then the strip scrolls (padding leaves room for the active tab's feet). */
       .tabs { display: flex; flex: 0 1 auto; min-width: 0; height: 34px; align-items: flex-end; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
-        padding: 0 10px; margin: 0 -10px; -webkit-app-region: no-drag; }
+        padding: 0 10px; margin: 0 -10px; -webkit-app-region: no-drag; scroll-behavior: smooth; scroll-padding-inline: 10px;
+        /* Soft edges when tabs are hidden on either side. */
+        mask-image: linear-gradient(90deg, transparent, #000 var(--fl, 0px), #000 calc(100% - var(--fr, 0px)), transparent); }
+      /* While closing tabs one after another, widths hold still so the next × lands under the pointer. */
+      .tabs.frozen .tab:not(.pinned):not(.active) { flex: 0 0 var(--frozen); width: var(--frozen); }
       .tabs::-webkit-scrollbar { display: none; }
       .tab {
         -webkit-app-region: no-drag; position: relative; flex: 0 1 240px; width: 240px; min-width: 44px; max-width: 240px; height: 34px;
@@ -45,6 +54,8 @@ export class VzTabstrip extends LitElement {
       }
       @keyframes grow { from { max-width: 0; opacity: 0; } }
       .tab.pinned { flex: 0 0 44px; width: 44px; }
+      /* The current tab never shrinks below icon + a few letters + ×. */
+      .tab.active:not(.pinned) { min-width: 104px; }
       .tab.drop { box-shadow: inset 2px 0 0 var(--vz-accent); }
       .tabs.drop-end { box-shadow: inset -2px 0 0 var(--vz-accent); }
       .tab.selected:not(.active) .body { background: var(--vz-accent-soft); color: var(--vz-text); }
@@ -77,14 +88,15 @@ export class VzTabstrip extends LitElement {
       .group.collapsed { opacity: .75; }
       .tab.in-group .body { box-shadow: inset 0 -2px 0 var(--g); border-radius: 8px 8px 2px 2px; }
       .add, .search { -webkit-app-region: no-drag; width: 28px; height: 28px; border-radius: 50%; }
-      .search { margin-left: 4px; }
+      .search { margin-left: 4px; position: relative; }
+      /* With hidden tabs, tab search becomes a "31 ⌄" pill: how many tabs, one click to find any. */
+      .search.counted { width: auto; padding: 0 6px 0 10px; gap: 2px; display: inline-flex; align-items: center; border-radius: 999px; background: var(--vz-tab-hover); animation: vz-rise 200ms var(--vz-ease); }
+      .count { font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--vz-text); }
       .end { width: var(--controls, 0); flex: none; }
       @container (max-width: 96px) {
         .body { justify-content: center; padding: 0; gap: 0; }
         .title { display: none; }
         .x { display: none; }
-        .tab.active .x { display: grid; margin-right: 4px; }
-        .tab.active .body .fav { display: none; }
       }
       @media (max-width: 640px) {
         .dot:not(.on) { display: none; }
@@ -127,8 +139,10 @@ export class VzTabstrip extends LitElement {
               @dragover=${(e: DragEvent) => this.dragId !== null && e.preventDefault()} @drop=${() => this.dragIds.forEach((id) => shell.moveTabToSpace(id, sp.id))}>${icon(sp.icon, 13)}</button>`)
           : nothing}
       </div>
-      <div class="tabs ${this.dragOver === tabs.length ? 'drop-end' : ''}" role="tablist" aria-label=${t('tabs_list')} aria-multiselectable="true"
-        @wheel=${(e: WheelEvent) => this.onWheel(e)}
+      <div class="tabs ${this.dragOver === tabs.length ? 'drop-end' : ''} ${this.frozen ? 'frozen' : ''}" role="tablist" aria-label=${t('tabs_list')} aria-multiselectable="true"
+        style="--fl:${this.edges.left ? 40 : 0}px;--fr:${this.edges.right ? 40 : 0}px;${this.frozen ? `--frozen:${this.frozen}px` : ''}"
+        @wheel=${(e: WheelEvent) => this.onWheel(e)} @scroll=${() => this.measure()} @pointerleave=${() => (this.frozen = null)}
+        @animationend=${(e: AnimationEvent) => this.onGrown(e)}
         @dragover=${(e: DragEvent) => this.onDragOver(e, tabs.length)} @dragleave=${() => (this.dragOver = null)}
         @drop=${(e: DragEvent) => this.onDrop(e, tabs.length)}>${repeat(items, (_x, i) => i, (x) => x)}</div>
       <div class="trail">
@@ -136,7 +150,7 @@ export class VzTabstrip extends LitElement {
       </div>
       <span style="flex:1;min-width:8px"></span>
       <div class="trail">
-        <button class="icon-btn search" aria-label=${t('cmd_tab_search')} title=${t('cmd_tab_search')} data-kbd=${mac ? '⌘⇧A' : 'Ctrl+Shift+A'} @click=${() => shell.runCommand('tab.search')}>${icon('chevron-down', 16)}</button>
+        <button class="icon-btn search ${this.edges.left || this.edges.right ? 'counted' : ''}" aria-label=${t('cmd_tab_search')} title=${t('cmd_tab_search')} data-kbd=${mac ? '⌘⇧A' : 'Ctrl+Shift+A'} @click=${() => shell.runCommand('tab.search')}>${this.edges.left || this.edges.right ? html`<span class="count" aria-hidden="true">${tabs.length}</span>` : nothing}${icon('chevron-down', 16)}</button>
       </div>
       <div class="end" style=${mac ? '' : '--controls:140px'}></div>
     `;
@@ -162,7 +176,7 @@ export class VzTabstrip extends LitElement {
         }}
         @dragover=${(e: DragEvent) => (e.stopPropagation(), this.onDragOver(e, i))}
         @drop=${(e: DragEvent) => (e.stopPropagation(), this.onDrop(e, i, x.id))}
-        @auxclick=${(e: MouseEvent) => e.button === 1 && shell.closeTab(x.id)}
+        @auxclick=${(e: MouseEvent) => e.button === 1 && this.close(e, x.id)}
         @contextmenu=${(e: MouseEvent) => (e.preventDefault(), shell.showTabMenu(x.id, { x: e.clientX, y: e.clientY }, this.sel.has(x.id) ? this.sel.targets(x.id, order) : undefined))}>
         ${active ? html`<span class="foot"></span>` : nothing}
         <button class="body" role="tab" aria-selected=${active || selected} title=${x.displayUrl ? `${x.title}\n${x.displayUrl}` : x.title} aria-label=${x.title + (x.audible ? `, ${t('tab_playing_audio')}` : '')}
@@ -171,7 +185,7 @@ export class VzTabstrip extends LitElement {
           ${x.pinned ? nothing : html`<span class="title">${x.title}</span>`}
           ${x.audible || x.muted ? html`<span class="audio">${icon(x.muted ? 'volume-x' : 'volume', 13)}</span>` : nothing}
         </button>
-        ${x.pinned ? nothing : html`<button class="x" tabindex="-1" aria-hidden="true" title=${t('cmd_tab_close')} @click=${() => shell.closeTab(x.id)}>${icon('x', 12)}</button>`}
+        ${x.pinned ? nothing : html`<button class="x" tabindex="-1" aria-hidden="true" title=${t('cmd_tab_close')} @click=${(e: MouseEvent) => this.close(e, x.id)}>${icon('x', 12)}</button>`}
       </div>`;
   }
 
@@ -186,7 +200,46 @@ export class VzTabstrip extends LitElement {
   private shownActive: number | null = null;
 
   /** Keeps a newly activated tab in view when the strip overflows. */
+  /** Closes a tab; the others keep their width until the pointer leaves the strip. */
+  private close(e: MouseEvent, id: number): void {
+    const tab = (e.currentTarget as HTMLElement).closest('.tab');
+    if (tab && !tab.classList.contains('active')) this.frozen = Math.round(tab.getBoundingClientRect().width);
+    else if (tab) this.frozen = Math.round(this.renderRoot.querySelector('.tab:not(.active):not(.pinned)')?.getBoundingClientRect().width ?? 0) || null;
+    void shell.closeTab(id);
+  }
+
+  /** Which ends of the strip hide tabs. */
+  private measure(): void {
+    const el = this.renderRoot.querySelector('.tabs');
+    if (!el) return;
+    // Hidden means a tab pokes past the visible area (inside the 10px side padding kept for
+    // the active tab's feet), measured on the tabs themselves.
+    const tabs = el.querySelectorAll('.tab');
+    const box = el.getBoundingClientRect();
+    const left = (tabs[0]?.getBoundingClientRect().left ?? box.left) < box.left + 9;
+    const right = (tabs[tabs.length - 1]?.getBoundingClientRect().right ?? box.right) > box.right - 9;
+    if (left !== this.edges.left || right !== this.edges.right) this.edges = { left, right };
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.ro.disconnect();
+  }
+
+  protected override firstUpdated(): void {
+    const el = this.renderRoot.querySelector('.tabs');
+    if (el) this.ro.observe(el);
+  }
+
+  /** A new tab grows in: once it has its full width, bring it fully into view. */
+  private onGrown(e: AnimationEvent): void {
+    const tab = e.target as HTMLElement;
+    if (tab.classList?.contains('active')) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    this.measure();
+  }
+
   protected override updated(): void {
+    requestAnimationFrame(() => this.measure());
     if (this.state.activeTabId === this.shownActive) return;
     this.shownActive = this.state.activeTabId;
     this.renderRoot.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
