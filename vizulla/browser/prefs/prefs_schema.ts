@@ -25,6 +25,25 @@ export interface Prefs {
   'updates.autoCheck': boolean;
   'passwords.offerToSave': boolean;
   'passwords.neverSave': string[];
+  /** Extension IDs turned off (kept installed, not loaded). */
+  /** Ads are blocked by default (Vizulla is ad-free); off shows ads everywhere, trackers stay blocked. */
+  /** Search suggestions from the search engine while typing (never in private windows). */
+  'search.suggestions': boolean;
+  /** Local MCP server for AI coding tools (off by default). */
+  'dev.mcp': boolean;
+  'dev.mcpToken': string;
+  'dev.mcpPort': number;
+  /** Tools (MCP client names) the user allowed. */
+  'dev.mcpClients': string[];
+  'shields.blockAds': boolean;
+  /** Sites where the user chose to see ads (trackers stay blocked). */
+  'shields.adsAllowedSites': string[];
+  'extensions.disabled': string[];
+  /** Extension IDs shown as toolbar buttons (the rest live in the puzzle menu). */
+  'extensions.pinned': string[];
+  /** Folders loaded with "Load unpacked" (developer mode). */
+  'extensions.unpacked': string[];
+  'extensions.devMode': boolean;
   'search.engine': SearchEngineId;
   'search.custom': CustomEngine | null;
   'search.chosen': boolean;
@@ -50,6 +69,10 @@ export interface Prefs {
   'memory.retentionDays': number;
   'memory.indexOnBattery': boolean;
   'privacy.telemetry': boolean;
+  /** Private windows can't be captured by screenshots or screen recording. */
+  'privacy.privateCaptureProtection': boolean;
+  /** macOS: hide private windows when Vizulla is in the background until Touch ID. */
+  'privacy.lockPrivate': boolean;
   'privacy.crashReports': boolean;
   'privacy.logRetentionDays': number;
   'onboarding.completed': boolean;
@@ -85,6 +108,17 @@ export const DEFAULT_PREFS: Prefs = {
   'updates.autoCheck': true,
   'passwords.offerToSave': true,
   'passwords.neverSave': [],
+  'search.suggestions': true,
+  'dev.mcp': false,
+  'dev.mcpToken': '',
+  'dev.mcpPort': 39457,
+  'dev.mcpClients': [],
+  'shields.blockAds': true,
+  'shields.adsAllowedSites': [],
+  'extensions.disabled': [],
+  'extensions.pinned': [],
+  'extensions.unpacked': [],
+  'extensions.devMode': false,
   'search.engine': 'duckduckgo',
   'search.custom': null,
   'search.chosen': false,
@@ -117,6 +151,8 @@ export const DEFAULT_PREFS: Prefs = {
   'memory.retentionDays': 90,
   'memory.indexOnBattery': false,
   'privacy.telemetry': false,
+  'privacy.privateCaptureProtection': true,
+  'privacy.lockPrivate': false,
   'privacy.crashReports': false,
   'privacy.logRetentionDays': 30,
   'onboarding.completed': false,
@@ -159,6 +195,9 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'shields.doh': (v) => ['off', 'automatic', 'secure'].includes(v as string),
   'shields.fingerprinting': (v) => ['off', 'standard', 'strict'].includes(v as string),
   'shields.cookieBanners': (v) => typeof v === 'boolean',
+  'shields.blockAds': (v) => typeof v === 'boolean',
+  'search.suggestions': (v) => typeof v === 'boolean',
+  'dev.mcp': (v) => typeof v === 'boolean',
   'ai.mode': (v) => ['off', 'cloud', 'byo', 'local'].includes(v as string),
   'ai.provider': (v) => ['gateway', 'anthropic', 'openai', 'google', 'openai-compatible', 'local'].includes(v as string),
   'ai.compatBaseUrl': (v) => typeof v === 'string' && /^https?:\/\/[^\s]+$/.test(v) && v.length < 300,
@@ -169,6 +208,8 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'memory.retentionDays': (v) => typeof v === 'number' && v >= 1 && v <= 3650,
   'memory.indexOnBattery': (v) => typeof v === 'boolean',
   'privacy.telemetry': (v) => typeof v === 'boolean',
+  'privacy.privateCaptureProtection': (v) => typeof v === 'boolean',
+  'privacy.lockPrivate': (v) => typeof v === 'boolean',
   'privacy.crashReports': (v) => typeof v === 'boolean',
   'onboarding.completed': (v) => typeof v === 'boolean',
   'agent.testerOptIn': (v) => typeof v === 'boolean',

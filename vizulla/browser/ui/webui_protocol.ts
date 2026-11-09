@@ -21,7 +21,7 @@ const CSP = [
   "default-src 'none'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https: http: vizulla:",
+  "img-src 'self' data: blob: https: http: vizulla: crx:",
   "font-src 'self' data:",
   "connect-src 'self'",
   "media-src 'self' blob:",

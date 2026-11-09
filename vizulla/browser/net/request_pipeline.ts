@@ -24,7 +24,9 @@ export class RequestPipeline {
   readonly stats = { requests: 0, blocked: 0, redirected: 0, totalMs: 0 };
 
   constructor(readonly session: Session) {
-    session.webRequest.onBeforeRequest((details, cb) => {
+    // Only network schemes cross into the browser process; vizulla://, extension,
+    // data: and blob: requests never reach this hook.
+    session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (details, cb) => {
       const t0 = performance.now();
       // Stats cover network traffic only; vizulla:// resources never leave the device.
       if (/^(https?|wss?):/.test(details.url)) this.stats.requests++;
@@ -44,17 +46,35 @@ export class RequestPipeline {
       this.stats.totalMs += performance.now() - t0;
       cb(out);
     });
-    session.webRequest.onBeforeSendHeaders((details, cb) => {
-      const requestHeaders = { ...details.requestHeaders };
-      for (const h of this.headers) h.onBeforeSendHeaders?.(details, requestHeaders);
-      cb({ requestHeaders });
-    });
-    session.webRequest.onHeadersReceived((details, cb) => {
-      if (!details.responseHeaders) return cb({});
-      const responseHeaders = { ...details.responseHeaders };
-      for (const h of this.headers) h.onHeadersReceived?.(details, responseHeaders);
-      cb({ responseHeaders });
-    });
+  }
+
+  /**
+   * Header hooks copy every request's and response's headers through the browser
+   * process, so they exist only while some feature needs them.
+   */
+  private syncHeaderHooks(): void {
+    const wr = this.session.webRequest;
+    const send = this.headers.some((h) => h.onBeforeSendHeaders);
+    const recv = this.headers.some((h) => h.onHeadersReceived);
+    wr.onBeforeSendHeaders(
+      send
+        ? (details, cb) => {
+            const requestHeaders = { ...details.requestHeaders };
+            for (const h of this.headers) h.onBeforeSendHeaders?.(details, requestHeaders);
+            cb({ requestHeaders });
+          }
+        : null,
+    );
+    wr.onHeadersReceived(
+      recv
+        ? (details, cb) => {
+            if (!details.responseHeaders) return cb({});
+            const responseHeaders = { ...details.responseHeaders };
+            for (const h of this.headers) h.onHeadersReceived?.(details, responseHeaders);
+            cb({ responseHeaders });
+          }
+        : null,
+    );
   }
 
   addBeforeRequest(h: BeforeRequestHandler): void {
@@ -63,11 +83,13 @@ export class RequestPipeline {
 
   addHeaders(h: HeadersHandler): void {
     this.headers = [...this.headers.filter((x) => x.name !== h.name), h];
+    this.syncHeaderHooks();
   }
 
   remove(name: string): void {
     this.before = this.before.filter((x) => x.name !== name);
     this.headers = this.headers.filter((x) => x.name !== name);
+    this.syncHeaderHooks();
   }
 }
 

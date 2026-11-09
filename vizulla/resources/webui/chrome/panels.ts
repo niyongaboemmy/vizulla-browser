@@ -23,7 +23,7 @@ export class VzPanels extends LitElement {
     css`
       :host { display: flex; flex-direction: column; height: 100%; min-width: 0; animation: panel-in 260ms var(--vz-ease); }
       @keyframes panel-in { from { opacity: 0; transform: translateX(16px); } }
-      .card { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--vz-toolbar); overflow: hidden; }
+      .card { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--vz-toolbar-bg, var(--vz-toolbar)); overflow: hidden; }
       .tabs { display: flex; align-items: center; gap: 2px; padding: 8px 8px 4px; }
       .tabs > * { -webkit-app-region: no-drag; }
       .tabs .tab { display: inline-grid; place-items: center; width: 34px; height: 32px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; color: var(--vz-text-2); transition: background var(--vz-dur), color var(--vz-dur); }

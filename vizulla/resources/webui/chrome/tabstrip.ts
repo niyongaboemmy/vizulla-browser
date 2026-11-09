@@ -82,7 +82,8 @@ export class VzTabstrip extends LitElement {
       .x { width: 20px; height: 20px; flex: none; border-radius: 50%; border: 0; background: transparent; color: var(--vz-text-2); display: grid; place-items: center; cursor: pointer; opacity: 0; margin-right: 6px; transition: opacity var(--vz-dur), background var(--vz-dur); -webkit-app-region: no-drag; }
       .tab:hover .x, .tab.active .x { opacity: 1; }
       .x:hover { background: var(--vz-surface-active); color: var(--vz-text); }
-      .audio { color: var(--vz-accent); display: grid; place-items: center; }
+      .audio { color: var(--vz-accent); display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; flex: none; transition: background var(--vz-dur); }
+      .audio:hover { background: var(--vz-surface-active); }
       .group { -webkit-app-region: no-drag; align-self: center; flex: none; height: 22px; max-width: 120px; padding: 0 9px; margin: 0 4px 3px; border-radius: 999px; border: 0; cursor: pointer;
         background: var(--g); color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .group.collapsed { opacity: .75; }
@@ -183,7 +184,10 @@ export class VzTabstrip extends LitElement {
           @click=${(e: MouseEvent) => this.sel.click(e, x.id, order, s.activeTabId) || shell.activateTab(x.id)}>
           <span class="fav ${x.loading ? 'loading' : ''} ${x.discarded ? 'asleep' : ''}">${favicon(x, 16)}</span>
           ${x.pinned ? nothing : html`<span class="title">${x.title}</span>`}
-          ${x.audible || x.muted ? html`<span class="audio">${icon(x.muted ? 'volume-x' : 'volume', 13)}</span>` : nothing}
+          ${x.audible || x.muted
+            ? html`<span class="audio" role="button" tabindex="-1" title=${x.muted ? t('ctx_unmute') : t('ctx_mute')} aria-label=${x.muted ? t('ctx_unmute') : t('ctx_mute')}
+                @click=${(e: MouseEvent) => (e.stopPropagation(), shell.setMuted(x.id, !x.muted))}>${icon(x.muted ? 'volume-x' : 'volume', 13)}</span>`
+            : nothing}
         </button>
         ${x.pinned ? nothing : html`<button class="x" tabindex="-1" aria-hidden="true" title=${t('cmd_tab_close')} @click=${(e: MouseEvent) => this.close(e, x.id)}>${icon('x', 12)}</button>`}
       </div>`;

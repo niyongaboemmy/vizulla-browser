@@ -3,7 +3,7 @@
 // language command mapper, which can only pick from this list (CMD-05).
 import type { StringKey } from '@vz/common/i18n';
 
-export type CommandCategory = 'tabs' | 'spaces' | 'navigation' | 'view' | 'ai' | 'privacy' | 'pages' | 'window' | 'agent';
+export type CommandCategory = 'tabs' | 'spaces' | 'navigation' | 'view' | 'ai' | 'privacy' | 'pages' | 'window' | 'agent' | 'tools';
 
 export interface CommandArgSpec {
   name: string;
@@ -69,6 +69,9 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'view.zoomOut', title: 'cmd_zoom_out', category: 'view', accelerator: 'CmdOrCtrl+-', keywords: 'smaller text' },
   { id: 'view.zoomReset', title: 'cmd_zoom_reset', category: 'view', accelerator: 'CmdOrCtrl+0' },
   { id: 'view.devtools', title: 'cmd_devtools', category: 'view', accelerator: 'CmdOrCtrl+Alt+I', keywords: 'inspect developer console' },
+  { id: 'view.inspect', title: 'cmd_inspect', category: 'view', accelerator: 'CmdOrCtrl+Alt+C', keywords: 'inspect element select element devtools' },
+  { id: 'view.source', title: 'cmd_view_source', category: 'view', accelerator: process.platform === 'darwin' ? 'Cmd+Alt+U' : 'Ctrl+U', keywords: 'view source page source html code' },
+  { id: 'tools.copyMarkdown', title: 'tool_copy_markdown', category: 'tools', keywords: 'copy as markdown page to markdown llm context ai prompt' },
   { id: 'view.fullscreen', title: 'cmd_fullscreen', category: 'view', accelerator: 'F11' },
   { id: 'view.theme', title: 'cmd_theme', category: 'view', keywords: 'dark light mode appearance' },
   // AI
@@ -90,9 +93,23 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'tab.moveToNewWindow', title: 'cmd_tab_move_window', category: 'window', keywords: 'detach tear off pop out separate' },
   // Internal pages
   { id: 'page.settings', title: 'cmd_settings', category: 'pages', accelerator: 'CmdOrCtrl+,', keywords: 'preferences options' },
+  { id: 'page.settingsShields', title: 'ads_settings', category: 'pages', keywords: 'ads adblock block ads show ads trackers shields ad blocker privacy' },
   { id: 'profile.manage', title: 'profile_manage', category: 'window', keywords: 'profiles people accounts switch user' },
   { id: 'profile.add', title: 'profile_add', category: 'window', keywords: 'new profile person account user' },
   { id: 'page.passwords', title: 'cmd_passwords', category: 'pages', keywords: 'password manager login account credentials keys' },
+  { id: 'tools.menu', title: 'cmd_tools', category: 'tools', keywords: 'tools utilities more tools' },
+  { id: 'tools.screenshot', title: 'tool_screenshot', category: 'tools', keywords: 'screenshot capture screen image snapshot capture d écran picha ya skrini ifoto' },
+  { id: 'tools.screenshotFull', title: 'tool_screenshot_full', category: 'tools', keywords: 'full page screenshot whole page capture long screenshot' },
+  { id: 'tools.savePdf', title: 'tool_save_pdf', category: 'tools', keywords: 'save as pdf export pdf enregistrer pdf' },
+  { id: 'tools.print', title: 'tool_print', category: 'tools', accelerator: 'CmdOrCtrl+P', keywords: 'print printer imprimer chapisha' },
+  { id: 'tools.qr', title: 'tool_qr', category: 'tools', keywords: 'qr code share link phone send to phone code qr' },
+  { id: 'tools.readAloud', title: 'tool_read_aloud', category: 'tools', keywords: 'read aloud text to speech listen speak voice lire à voix haute soma kwa sauti' },
+  { id: 'tools.pip', title: 'tool_pip', category: 'tools', keywords: 'picture in picture pip video floating video' },
+  { id: 'tools.colorPicker', title: 'tool_color_picker', category: 'tools', keywords: 'color picker eyedropper colour hex pipette' },
+  { id: 'tools.clearSiteData', title: 'tool_clear_site', category: 'tools', destructive: true, keywords: 'clear site data cookies storage reset site effacer données du site' },
+  { id: 'window.closePrivate', title: 'cmd_close_private', category: 'window', keywords: 'close private incognito windows' },
+  { id: 'page.taskManager', title: 'cmd_task_manager', category: 'pages', accelerator: 'Shift+Escape', keywords: 'task manager memory cpu slow performance process heavy' },
+  { id: 'page.extensions', title: 'cmd_extensions', category: 'pages', keywords: 'extensions add-ons addons plugins chrome web store puzzle install' },
   { id: 'page.history', title: 'cmd_history', category: 'pages', accelerator: 'CmdOrCtrl+Y' },
   { id: 'page.downloads', title: 'cmd_downloads', category: 'pages', accelerator: 'CmdOrCtrl+Shift+J' },
   { id: 'page.bookmarks', title: 'cmd_bookmarks', category: 'pages', accelerator: 'CmdOrCtrl+Shift+O' },

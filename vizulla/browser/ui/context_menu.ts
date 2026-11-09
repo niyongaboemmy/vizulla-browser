@@ -1,5 +1,5 @@
 // Native context menus for page content (accessible by default, and not spoofable by pages).
-import { clipboard, Menu, type MenuItemConstructorOptions } from 'electron';
+import { clipboard, Menu, MenuItem, type MenuItemConstructorOptions } from 'electron';
 import { t } from '@vz/common/i18n';
 import type { BrowserWindowController } from './browser_window';
 import type { WebTab } from '../tabs/web_tab';
@@ -57,5 +57,13 @@ export function buildPageContextMenu(w: BrowserWindowController, tab: WebTab, p:
     }
   }
   items.push({ label: t('ctx_inspect'), click: () => wc.inspectElement(p.x, p.y) });
-  return Menu.buildFromTemplate(items);
+  // Items added by extensions (chrome.contextMenus) go just above Inspect, as in Chrome.
+  const ext = w.app.extensions.contextMenuItems(wc, p);
+  const menu = Menu.buildFromTemplate(items);
+  if (ext.length) {
+    const at = menu.items.length - 1;
+    menu.insert(at, new MenuItem({ type: 'separator' }));
+    ext.reverse().forEach((item) => menu.insert(at, item));
+  }
+  return menu;
 }

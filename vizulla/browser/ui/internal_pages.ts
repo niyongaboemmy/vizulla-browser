@@ -14,6 +14,7 @@ import { detectSources, importFrom, parsePasswordCsv, type ImportSource } from '
 import { generatePassword, type PasswordVault } from '../passwords/password_vault';
 import { PROFILE_COLORS } from '../profiles/profile_registry';
 import { BRANDING } from '@vz/app/branding';
+import { endProcess, taskRows } from './task_manager';
 
 const SHELL_HOSTS = new Set(['chrome', 'overlay']);
 
@@ -80,6 +81,10 @@ export class InternalPages {
     this.define('newtab', {
       init: (_x, ctx) => {
         const w = ctx.window ?? a.focused();
+        // Private windows: the private start page, nothing from the regular profile.
+        if (w?.profile.isPrivate) {
+          return { private: { capture: p.prefs.get('privacy.privateCaptureProtection') }, space: null, pins: [], recent: [], archived: [], engine: engineName(p.prefs.get('search.engine')), onboarded: true, aiMode: p.prefs.get('ai.mode') };
+        }
         const spaceId = w?.model.activeSpaceId ?? p.spaces.list()[0]!.id;
         const space = p.spaces.get(spaceId);
         const pins = w ? w.model.visible(spaceId).filter((m) => m.pinned).map((m) => w.tabInfo(m.id)) : [];
@@ -213,6 +218,70 @@ export class InternalPages {
       },
     });
 
+    // ---- Task Manager (Shift+Esc)
+    this.define('task-manager', {
+      init: () => taskRows(a),
+      list: () => taskRows(a),
+      end: (x) => {
+        endProcess(a, v.int({ min: 1, max: 2 ** 31 }).parse(x, 'pid'));
+        return taskRows(a);
+      },
+    });
+
+    // ---- Extensions (EXT-01/02)
+    const ext = a.extensions;
+    const extData = () => ({ list: ext.list(), devMode: p.prefs.get('extensions.devMode') });
+    const extId = v.string({ max: 300 });
+    this.define('extensions', {
+      init: async () => {
+        await ext.start();
+        return extData();
+      },
+      setEnabled: async (x) => {
+        const { id: eid, on } = v.object({ id: extId, on: v.bool() }).parse(x, 'setEnabled');
+        await ext.setEnabled(eid, on);
+        return extData();
+      },
+      setPinned: (x) => {
+        const { id: eid, on } = v.object({ id: extId, on: v.bool() }).parse(x, 'setPinned');
+        ext.setPinned(eid, on);
+        return extData();
+      },
+      remove: async (x) => {
+        await ext.remove(extId.parse(x, 'id'));
+        return extData();
+      },
+      reload: async (x) => {
+        await ext.reload(extId.parse(x, 'id'));
+        return extData();
+      },
+      loadUnpacked: async () => {
+        await ext.loadUnpacked();
+        return extData();
+      },
+      update: async () => {
+        await ext.updateAll();
+        return extData();
+      },
+      setDevMode: (x) => {
+        p.prefs.set('extensions.devMode', v.bool().parse(x, 'on'));
+        return extData();
+      },
+      // A store link or ID opens its store page; empty opens the store home.
+      openStore: (x) => {
+        const input = v.string({ max: 2048 }).parse(x, 'input').trim();
+        const url = input ? ext.storeUrlFor(input) : 'https://chromewebstore.google.com/category/extensions';
+        if (!url) return false;
+        a.openInTab(url);
+        return true;
+      },
+      openUrl: (x) => {
+        const url = v.string({ max: 2048 }).parse(x, 'url');
+        if (!/^chrome-extension:\/\/[a-p]{32}\//.test(url)) throw new Error('not an extension page');
+        a.openInTab(url);
+      },
+    });
+
     // ---- Settings (P2-BRW-20)
     this.define('settings', {
       init: () => this.settingsData(),
@@ -283,6 +352,27 @@ export class InternalPages {
         const { origin, permission } = v.object({ origin: v.string({ max: 512 }), permission: v.string({ max: 64 }) }).parse(payload, 'perm');
         p.permissions.set(origin, permission, null);
         return p.permissions.list();
+      },
+      mcpCopy: (payload) => {
+        const what = v.string({ max: 16 }).parse(payload, 'what');
+        const token = p.prefs.get('dev.mcpToken');
+        const url = a.mcp.url ?? `http://127.0.0.1:${p.prefs.get('dev.mcpPort')}/mcp`;
+        clipboard.writeText(what === 'token' ? token : `claude mcp add --transport http vizulla ${url} --header "Authorization: Bearer ${token}"`);
+        return true;
+      },
+      mcpNewToken: () => {
+        a.mcp.regenerateToken();
+        return this.settingsData();
+      },
+      mcpRemoveClient: (payload) => {
+        const name = v.string({ max: 80 }).parse(payload, 'client');
+        p.prefs.set('dev.mcpClients', p.prefs.get('dev.mcpClients').filter((c) => c !== name));
+        return this.settingsData();
+      },
+      removeAdsAllowed: (payload) => {
+        const site = v.string({ max: 255 }).parse(payload, 'site');
+        p.prefs.set('shields.adsAllowedSites', p.prefs.get('shields.adsAllowedSites').filter((s) => s !== site));
+        return this.settingsData();
       },
       removeShieldsException: (payload) => {
         const site = v.string({ max: 255 }).parse(payload, 'site');
@@ -418,6 +508,8 @@ export class InternalPages {
       shields: p.shields.status(-1, ''),
       isDefaultBrowser: app.isDefaultProtocolClient('https'),
       encryption: p.keys.constructor.name === 'KeychainKeyProvider' ? 'os-keychain' : 'memory',
+      touchId: process.platform === 'darwin' && systemPreferences.canPromptTouchID(),
+      mcp: this.app.mcp ? { url: this.app.mcp.url, token: p.prefs.get('dev.mcpToken'), clients: p.prefs.get('dev.mcpClients'), activity: this.app.mcp.activity.slice(0, 8) } : null,
       features: p.features.snapshot(),
       sync: p.service<{ status(): unknown }>('sync')?.status() ?? null,
     };

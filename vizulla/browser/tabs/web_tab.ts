@@ -4,6 +4,7 @@ import { WebContentsView, type Session, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { displayUrl, securityStateOf } from '@vz/common/url';
 import type { NavState } from '../spaces/spaces_service';
+import { hasGlass } from '../ui/glass';
 
 let nextTabId = 1;
 
@@ -167,6 +168,8 @@ export class WebTab extends EventEmitter {
     this.crashed = false;
     view.setBackgroundColor('#ffffff');
     const wc = view.webContents;
+    // Listeners attach after construction, so 'live' is deferred a tick.
+    queueMicrotask(() => !wc.isDestroyed() && this.emit('live', wc));
     wc.setZoomFactor(this.zoom);
     wc.setAudioMuted(this.muted);
     const upd = () => this.emit('updated');
@@ -185,6 +188,8 @@ export class WebTab extends EventEmitter {
       }
     });
     wc.on('did-navigate', (_e, url, httpResponseCode) => {
+      // Vizulla's own pages are frosted glass over the window; websites keep white.
+      if (hasGlass) view.setBackgroundColor(url.startsWith('vizulla:') ? '#00000000' : '#ffffff');
       this.url = url;
       this.isPdf = false;
       this.favicon = null;

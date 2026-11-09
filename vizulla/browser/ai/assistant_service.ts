@@ -53,16 +53,6 @@ export class AssistantService {
     const p = app.profile;
     this.keys = p.register('providerKeys', new ProviderKeys(join(p.dir, 'Keys', 'provider_keys.json'), p.keys));
     this.bind();
-    // PDF detection: the main-frame response's content type.
-    p.pipeline.addHeaders({
-      name: 'pdf-detect',
-      onHeadersReceived: (d, headers) => {
-        if (d.resourceType !== 'mainFrame' || d.webContentsId === undefined) return;
-        const ct = Object.entries(headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1]?.[0] ?? '';
-        if (ct.includes('application/pdf')) this.pdfTabs.add(d.webContentsId);
-        else this.pdfTabs.delete(d.webContentsId);
-      },
-    });
     app.hooks.ask.push((w, text) => {
       if (!this.enabled()) return false;
       w.setPanel('assistant');
@@ -76,6 +66,24 @@ export class AssistantService {
         const wc = tab.wc;
         if (wc) tab.isPdf = this.pdfTabs.has(wc.id) || /\.pdf($|\?)/i.test(tab.url);
         if (tab.id === w.model.activeTabId) this.push(w);
+      });
+      // PDF detection: ask the loaded document for its type (once per load), instead of
+      // a response-headers hook on every request.
+      w.on('tab-loaded', (tab: WebTab) => {
+        const wc = tab.wc;
+        if (!wc || !/^(https?|file):/.test(tab.url)) return;
+        void wc
+          .executeJavaScript('document.contentType', false)
+          .then((ct: string) => {
+            const pdf = ct === 'application/pdf';
+            if (pdf === this.pdfTabs.has(wc.id)) return;
+            if (pdf) this.pdfTabs.add(wc.id);
+            else this.pdfTabs.delete(wc.id);
+            tab.isPdf = pdf || /\.pdf($|\?)/i.test(tab.url);
+            if (tab.id === w.model.activeTabId) this.push(w);
+            w.pushState();
+          })
+          .catch(() => undefined);
       });
     });
     app.commandHandlers.set('ai.panel', (w) => w.togglePanel('assistant'));

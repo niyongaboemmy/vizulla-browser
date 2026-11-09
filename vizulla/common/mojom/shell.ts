@@ -53,6 +53,9 @@ export const ShellInterface = defineInterface('Shell', {
   stopFind: [tabId],
   restoreArchived: [v.int({ min: 0 })],
   openShieldsPanel: [rect],
+  openExtensionsMenu: [rect],
+  openToolsMenu: [rect],
+  openAppMenu: [rect],
   windowControl: [v.literal('minimize', 'maximize', 'close')],
   agentControl: [v.literal('pause', 'resume', 'takeover', 'stop')],
 });
@@ -69,6 +72,11 @@ export const OverlayInterface = defineInterface('Overlay', {
   dialogResult: [v.id(), v.json({ maxBytes: 65536 })],
   // Shields panel
   setShieldsForSite: [v.bool()],
+  setAdsForSite: [v.bool()],
+  // Extensions menu: pin, unpin, open (popup or click), manage
+  extensionMenu: [v.string({ max: 64 }), v.string({ max: 16 })],
+  // ⋮ menu: run an item; zoom keeps the menu open and returns the updated menu
+  appMenuAction: [v.string({ max: 64 })],
 });
 
 /** Generic page handler for vizulla:// pages: each method is host-checked in the browser. */

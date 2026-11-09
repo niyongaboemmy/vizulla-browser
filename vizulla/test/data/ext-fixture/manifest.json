@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Vizulla Test Extension",
+  "version": "1.2.0",
+  "description": "Fixture for end-to-end tests: action popup, badge, context menu, content script, tabs.",
+  "icons": { "48": "icon.png" },
+  "action": { "default_title": "Vizulla Test", "default_popup": "popup.html", "default_icon": { "32": "icon.png" } },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["contextMenus", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "content_scripts": [{ "matches": ["http://127.0.0.1/*"], "js": ["content.js"], "run_at": "document_end" }],
+  "options_page": "options.html"
+}

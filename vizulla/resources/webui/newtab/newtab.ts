@@ -15,6 +15,8 @@ interface Data {
   engine: string;
   onboarded: boolean;
   aiMode: string;
+  /** Set in private windows. */
+  private?: { capture: boolean };
 }
 
 const HUES = [228, 172, 32, 346, 262, 152, 199, 215];
@@ -32,7 +34,7 @@ class VzNewTab extends VzPage<Data> {
     base,
     pageStyles,
     css`
-      :host { display: grid; place-items: start center; min-height: 100vh; background: var(--vz-toolbar); }
+      :host { display: grid; place-items: start center; min-height: 100vh; background: var(--vz-ntp-bg, var(--vz-toolbar)); }
       .wrap { width: min(584px, calc(100vw - 48px)); padding-top: 18vh; display: flex; flex-direction: column; align-items: center; }
       .glyph { display: grid; margin-bottom: 30px; }
       /* Chrome-style search pill: filled, no border; white with an accent ring on hover/focus. */
@@ -63,6 +65,18 @@ class VzNewTab extends VzPage<Data> {
       .act { width: 36px; height: 36px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2); background: transparent;
         transition: background var(--vz-dur), color var(--vz-dur); }
       .act:hover { color: var(--vz-accent); background: var(--vz-toolbar); }
+      /* Private start page */
+      .priv { width: min(880px, calc(100vw - 40px)); padding: 9vh 0 60px; display: grid; gap: 22px; justify-items: center; text-align: center; }
+      .priv-orb { width: 76px; height: 76px; border-radius: 24px; display: grid; place-items: center; color: #fff; background: linear-gradient(160deg, #6366f1, #312e81); animation: vz-rise 380ms var(--vz-ease); }
+      .priv h1 { margin: 0; font-size: 30px; letter-spacing: -0.02em; }
+      .priv .lead { margin: -8px 0 0; color: var(--vz-text-2); max-width: 560px; }
+      .priv .bar { max-width: 584px; text-align: left; }
+      .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: 100%; text-align: left; }
+      .col { padding: 18px; border-radius: 20px; border: 1px solid var(--vz-glass-border); background: var(--vz-glass); backdrop-filter: blur(20px) saturate(160%); animation: vz-rise 380ms var(--vz-ease) both; }
+      .col h2 { margin: 0 0 10px; font-size: var(--vz-text-m); display: flex; gap: 8px; align-items: center; }
+      .col ul { margin: 0; padding-left: 18px; color: var(--vz-text-2); font-size: var(--vz-text-s); line-height: 1.7; }
+      .col.on h2 { color: #a5b4fc; }
+      @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
       @media (max-width: 520px) { .tile { width: 96px; } .actions { right: 50%; transform: translateX(50%); } }
     `,
   ];
@@ -76,9 +90,29 @@ class VzNewTab extends VzPage<Data> {
       <span class="label">${title || host}</span>${badge ? html`<span class="badge">${icon(badge, 11)}</span>` : nothing}</button>`;
   }
 
+  private renderPrivate(d: Data) {
+    const mac = navigator.platform.startsWith('Mac');
+    const col = (i: number, ic: string, title: string, items: string[], on = false) =>
+      html`<section class="col ${on ? 'on' : ''}" style="animation-delay:${120 + i * 60}ms" aria-label=${title}><h2>${icon(ic, 15)} ${title}</h2><ul>${items.map((x) => html`<li>${x}</li>`)}</ul></section>`;
+    return html`<div class="priv">
+      <div class="priv-orb">${icon('eye-off', 34)}</div>
+      <h1>${t('ntp_private_title')}</h1>
+      <p class="lead">${t('ntp_private_lead')}</p>
+      <div class="bar" role="button" tabindex="0" @click=${() => this.invoke('openCommandBar')} @keydown=${(e: KeyboardEvent) => e.key !== 'Tab' && this.invoke('openCommandBar')}>
+        ${icon('search', 18)}<span class="grow"><span class="sr-only">${t('cb_placeholder')} · </span>${d.engine}</span><span class="kbd" aria-hidden="true">${mac ? '⌘K' : 'Ctrl K'}</span>
+      </div>
+      <div class="cols">
+        ${col(0, 'trash', t('ntp_private_not_saved'), [t('ntp_private_ns_history'), t('ntp_private_ns_cookies'), t('ntp_private_ns_forms'), t('ntp_private_ns_permissions')])}
+        ${col(1, 'eye', t('ntp_private_visible'), [t('ntp_private_v_sites'), t('ntp_private_v_work'), t('ntp_private_v_isp')])}
+        ${col(2, 'shield-check', t('ntp_private_protections'), [t('ntp_private_p_trackers'), t('ntp_private_p_fp'), ...(d.private?.capture ? [t('ntp_private_p_capture')] : []), t('ntp_private_p_ext')], true)}
+      </div>
+    </div>`;
+  }
+
   override render() {
     const d = this.data;
     if (!d) return nothing;
+    if (d.private) return this.renderPrivate(d);
     const mac = navigator.platform.startsWith('Mac');
     const seen = new Set<string>();
     const recent = d.recent.filter((r) => !seen.has(hostOf(r.url)) && seen.add(hostOf(r.url)));

@@ -33,7 +33,8 @@ function nodeTargets(dev) {
   };
   const preloads = readdirSync(join(VZ, 'preload')).filter((f) => f.endsWith('_preload.ts'));
   return [
-    { ...common, entryPoints: { main: join(VZ, 'app', 'main.ts') }, outdir: join(OUT, 'main') },
+    // Extension libraries resolve their preload scripts from node_modules at run time.
+    { ...common, external: [...common.external, 'electron-chrome-extensions', 'electron-chrome-web-store'], entryPoints: { main: join(VZ, 'app', 'main.ts') }, outdir: join(OUT, 'main') },
     {
       ...common,
       entryPoints: Object.fromEntries(preloads.map((f) => [f.replace('.ts', ''), join(VZ, 'preload', f)])),

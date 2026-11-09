@@ -89,6 +89,12 @@ function normalizeType(t: string): string {
   return t || 'other';
 }
 
+/** A request to a known tracking company (used by strict mode beyond the lists). */
+export function isKnownTracker(url: string): boolean {
+  const u = url.toLowerCase();
+  return TRACKER_HOSTS.some((h) => u.includes(h));
+}
+
 export function categorize(url: string): RequestCategory {
   const u = url.toLowerCase();
   return TRACKER_HOSTS.some((h) => u.includes(h)) ? 'trackers' : 'ads';

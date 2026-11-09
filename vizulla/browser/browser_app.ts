@@ -2,7 +2,7 @@
 // Binds IPC interfaces, routes commands, builds the application menu with
 // Chrome-compatible accelerators, runs tab lifecycle timers, and exposes the
 // extension points later phases register into (panels, AI actions, agent).
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, session as electronSession, shell, type MenuItemConstructorOptions, type Session } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, type Session, session as electronSession, shell, systemPreferences } from 'electron';
 import { join } from 'node:path';
 import type { Profile } from './profile';
 import { BrowserWindowController, WEBUI_PRELOAD, type WindowInit } from './ui/browser_window';
@@ -13,14 +13,22 @@ import { COMMANDS, findCommand, type CommandDef } from './command_bar/commands';
 import { resolveAccept, suggest, type SuggestSources } from './command_bar/suggest';
 import { setLocale, resolveLocale, t, type StringKey } from '@vz/common/i18n';
 import { displayUrl, searchUrl, setCustomEngine } from '@vz/common/url';
-import type { AgentBarState, PanelKind } from '@vz/common/types';
+import type { AgentBarState, PanelKind, Suggestion } from '@vz/common/types';
 import { ALL_FEATURES } from './vizulla_features';
 import { InternalPages } from './ui/internal_pages';
 import { confirmNl } from './ai/ai_features';
 import { UpdateService } from './updates/update_service';
 import { PasswordService } from './passwords/password_service';
+import { ExtensionsService } from './extensions/extensions_service';
+import type { WebTab } from './tabs/web_tab';
 import { profileArgs, Profiles } from './profiles/profiles';
 import { BRANDING } from '../app/branding';
+import { destinationUrl, matchDestinations } from './command_bar/destinations';
+import { EngineSuggest } from './command_bar/engine_suggest';
+import { ToolsService } from './tools/tools_service';
+import { hasGlass } from './ui/glass';
+import { installDevTools } from './tools/dev_tools';
+import { McpServer } from './mcp/mcp_server';
 
 export type CommandHandler = (w: BrowserWindowController, args?: Record<string, unknown>) => unknown;
 export type PageMethod = (payload: unknown, ctx: CallContext & { window: BrowserWindowController | null }) => unknown;
@@ -60,13 +68,23 @@ export class BrowserApp {
   readonly pages: InternalPages;
   readonly updates: UpdateService;
   readonly passwords: PasswordService;
+  readonly extensions: ExtensionsService;
+  readonly tools: ToolsService;
+  mcp!: McpServer;
+  private readonly engineSuggest = new EngineSuggest();
+  /** Where each window's extensions menu was opened (popups anchor there). */
+  private readonly extensionsAnchor = new WeakMap<BrowserWindowController, { x: number; y: number; width: number; height: number }>();
   readonly profiles: Profiles;
 
   constructor(readonly profile: Profile, readonly outDir: string) {
     this.preloadPath = WEBUI_PRELOAD(outDir);
     this.chromeSession = electronSession.fromPartition('persist:vizulla-chrome');
-    ipcMain.on('vz:web-languages', (e) => {
-      e.returnValue = this.webLanguages.get(e.sender.session) ?? [];
+    // Every web frame's settings in one synchronous call (preload/page_preload.ts).
+    ipcMain.on('vz:page-config', (e) => {
+      e.returnValue = {
+        langs: this.webLanguages.get(e.sender.session) ?? [],
+        farble: this.farbleConfig?.(e.sender.session, e.senderFrame?.top?.url ?? e.sender.getURL()) ?? { level: 'off', seed: 0 },
+      };
     });
     this.applyLocale();
     profile.prefs.observe('appearance.locale', () => {
@@ -116,11 +134,33 @@ export class BrowserApp {
     const pa = profileArgs(process.argv, app.getPath('userData'));
     this.profiles = new Profiles(pa.id, pa.root, () => void this.openWindow());
     this.passwords = new PasswordService(this);
+    this.extensions = new ExtensionsService(this, profile);
+    this.tools = new ToolsService(this);
+    installDevTools(this);
     this.pages = new InternalPages(this);
     this.bindInterfaces();
     this.registerBaseCommands();
     this.buildMenu();
     this.startTimers();
+    void this.extensions.start();
+    this.mcp = new McpServer(this);
+    // Optional (macOS): private windows lock when Vizulla goes to the background.
+    if (process.platform === 'darwin') {
+      app.on('did-resign-active', () => {
+        if (!this.profile.prefs.get('privacy.lockPrivate') || !systemPreferences.canPromptTouchID()) return;
+        for (const w of this.windows) if (w.profile.isPrivate) void w.lockPrivate();
+      });
+    }
+  }
+
+  userDataPath(): string {
+    return app.getPath('userData');
+  }
+
+  /** The window and tab that own a tab's web contents (extensions, context menus). */
+  findTabByWebContents(wc: Electron.WebContents): { window: BrowserWindowController; tab: WebTab } | null {
+    for (const w of this.windows) for (const tab of w.tabs.values()) if (tab.wc === wc) return { window: w, tab };
+    return null;
   }
 
   // ------------------------------------------------------------ windows
@@ -425,11 +465,17 @@ export class BrowserApp {
       if (id !== null && w.model.all().length > 1) this.moveTabs([id], 'new');
     });
     c.set('page.settings', page('vizulla://settings'));
+    c.set('page.settingsShields', page('vizulla://settings/shields'));
     c.set('page.history', page('vizulla://history'));
     c.set('page.passwords', (w) => this.passwords.open(w));
     c.set('profile.manage', (w) => this.openProfiles(w));
     c.set('profile.add', (w) => this.openProfiles(w, true));
     c.set('page.downloads', page('vizulla://downloads'));
+    c.set('page.extensions', page('vizulla://extensions'));
+    c.set('page.taskManager', page('vizulla://task-manager'));
+    c.set('window.closePrivate', () => {
+      for (const x of [...this.windows]) if (x.profile.isPrivate) x.win.close();
+    });
     c.set('page.bookmarks', page('vizulla://bookmarks'));
     c.set('page.privacy', page('vizulla://privacy'));
     c.set('page.archive', page('vizulla://archive'));
@@ -551,6 +597,21 @@ export class BrowserApp {
           if (!tab?.wc) return;
           w.overlay.show({ kind: 'shields', anchor, status: w.profile.shields.status(tab.wc.id, tab.url) });
         },
+        openToolsMenu: (ctx, anchor) => {
+          const w = win(ctx);
+          this.tools.anchors.set(w, anchor);
+          this.tools.openMenu(w, anchor);
+        },
+        openAppMenu: (ctx, anchor) => {
+          const w = win(ctx);
+          w.overlay.show({ kind: 'app-menu', anchor, menu: this.appMenuModel(w) });
+        },
+        openExtensionsMenu: (ctx, anchor) => {
+          const w = win(ctx);
+          if (w.profile.isPrivate) return;
+          this.extensionsAnchor.set(w, anchor);
+          w.overlay.show({ kind: 'extensions', anchor, items: this.extensions.menuItems() });
+        },
         windowControl: (ctx, what) => {
           const w = win(ctx).win;
           if (what === 'minimize') w.minimize();
@@ -572,7 +633,29 @@ export class BrowserApp {
         query: async (ctx, input, mode) => {
           const w = win(ctx);
           await Promise.all(this.hooks.prefetchSuggest.map((fn) => fn(w, input).catch(() => undefined)));
-          return suggest(input, mode, this.suggestSources(w));
+          const r = suggest(input, mode, this.suggestSources(w));
+          // Search-engine suggestions under the search row (address bar, normal windows).
+          if (mode === 'address' && r.route === 'search' && !w.profile.isPrivate && w.profile.prefs.get('search.suggestions')) {
+            const list = await this.engineSuggest.get(w.profile.prefs.get('search.engine'), input);
+            if (list.length) {
+              const rows: Suggestion[] = list.map((s) => ({ id: `search:${s}`, kind: 'search', title: s, detail: t('cb_engine_suggestion'), icon: 'search', section: 'search' }));
+              const at = r.suggestions.findIndex((s) => s.kind === 'search');
+              if (at >= 0) r.suggestions.splice(at + 1, 0, ...rows);
+              else r.suggestions.push(...rows);
+              r.suggestions = r.suggestions.slice(0, 16);
+            }
+          }
+          // Warm up a connection to the site the top row would open (DNS + TLS), as
+          // Chrome's omnibox does; Enter then lands sooner.
+          const top = r.suggestions[0];
+          if (top?.kind === 'url' && top.id.startsWith('nav:https://')) {
+            try {
+              w.profile.session.preconnect({ url: top.id.slice(4), numSockets: 1 });
+            } catch {
+              /* not a valid URL yet */
+            }
+          }
+          return r;
         },
         accept: (ctx, input, suggestionId, opts) => this.acceptCommandBar(win(ctx), input, suggestionId, opts),
         dialogResult: (ctx, id, result) => win(ctx).overlay.dialogResult(id, result),
@@ -584,6 +667,37 @@ export class BrowserApp {
           tab.wc.reload();
           return w.profile.shields.status(tab.wc.id, tab.url);
         },
+        setAdsForSite: (ctx, allow) => {
+          const w = win(ctx);
+          const tab = w.activeTab();
+          if (!tab?.wc || !tab.url.startsWith('http')) return null;
+          w.profile.shields.setAdsAllowed(tab.url, allow);
+          tab.wc.reload();
+          return w.profile.shields.status(tab.wc.id, tab.url);
+        },
+        appMenuAction: (ctx, id) => {
+          const w = win(ctx);
+          const stay = id === 'view.zoomIn' || id === 'view.zoomOut' || id === 'view.zoomReset';
+          if (!stay) w.overlay.close();
+          if (id === 'tools.menu') {
+            this.tools.openMenu(w);
+            return null;
+          }
+          this.runCommand(w, id);
+          return stay ? this.appMenuModel(w) : null;
+        },
+        extensionMenu: (ctx, id, action) => {
+          const w = win(ctx);
+          if (action === 'pin' || action === 'unpin') this.extensions.setPinned(id, action === 'pin');
+          else if (action === 'manage') {
+            w.overlay.close();
+            this.openInTab('vizulla://extensions/');
+          } else if (action === 'open') {
+            w.overlay.close();
+            this.extensions.activate(w, id, this.extensionsAnchor.get(w) ?? { x: 0, y: 0, width: 0, height: 0 });
+          }
+          return this.extensions.menuItems();
+        },
       },
       { hosts: ['overlay'] },
     );
@@ -591,10 +705,13 @@ export class BrowserApp {
     this.router.bind(
       PagesInterface,
       {
-        getInitialData: (ctx) => {
+        getInitialData: async (ctx) => {
           const handlers = this.pageHandlers.get(ctx.host);
           const w = this.windowForSender(ctx.sender);
-          return { locale: this.locale, theme: this.profile.prefs.get('appearance.theme'), accent: this.profile.prefs.get('appearance.accent'), data: handlers?.init?.(null, { ...ctx, window: w }) ?? null };
+          // A page's init may be async (e.g. extensions finish loading first).
+          const data = (await handlers?.init?.(null, { ...ctx, window: w })) ?? null;
+          const theme = w?.profile.isPrivate ? 'dark' : this.profile.prefs.get('appearance.theme');
+          return { locale: this.locale, theme, accent: this.profile.prefs.get('appearance.accent'), glass: hasGlass && theme !== 'high-contrast', data };
         },
         invoke: (ctx, method, payload) => {
           const fn = this.pageHandlers.get(ctx.host)?.[method];
@@ -632,7 +749,17 @@ export class BrowserApp {
       shortcutLabel: (a) => acceleratorLabel(a),
       searchEngine: p.prefs.get('search.engine'),
       aiEnabled: p.prefs.get('ai.mode') !== 'off',
-      strings: { goTo: t('cb_go_to'), searchFor: t('cb_search_with'), ask: t('cb_ask_assistant'), switchToTab: t('cb_switch_to_tab'), restoreArchived: t('cb_restore_archived') },
+      destinations: (q, n, group) =>
+        matchDestinations(q, (d) => t(d.title), n, group)
+          .filter(({ d }) => !d.command || this.commandHandlers.has(d.command))
+          .flatMap(({ d }) => {
+            const target = d.command ? `cmd:${d.command}` : destinationUrl(d, (k) => t(k));
+            return target ? [{ id: d.id, title: t(d.title), detail: t(`cb_dest_${d.group}`), icon: d.icon, target: d.command ? target : `nav:${target}` }] : [];
+          }),
+      strings: {
+        goTo: t('cb_go_to'), searchFor: t('cb_search_with'), ask: t('cb_ask_assistant'), switchToTab: t('cb_switch_to_tab'), restoreArchived: t('cb_restore_archived'),
+        scopes: { tabs: t('cb_scope_tabs'), history: t('cb_scope_history'), bookmarks: t('cb_scope_bookmarks'), settings: t('cb_scope_settings'), tools: t('cb_scope_tools') },
+      },
     };
     for (const fn of this.hooks.suggestSources) Object.assign(base, fn(p, base));
     return base;
@@ -792,12 +919,36 @@ export class BrowserApp {
 
   // ------------------------------------------------------------ menu & accelerators
 
+  /** The ⋮ menu (glass, in the overlay): Chrome's layout with Vizulla's tools. */
+  appMenuModel(w: BrowserWindowController) {
+    const item = (id: string, sub = false) => {
+      const c = findCommand(id);
+      return c ? { id, label: t(c.title), shortcut: acceleratorLabel(c.accelerator) ?? '', enabled: this.commandEnabled(c, w), sub } : null;
+    };
+    const group = (...ids: (string | [string, true])[]) => ids.map((x) => (Array.isArray(x) ? item(x[0], true) : item(x))).filter(Boolean);
+    const u = this.updates.info();
+    return {
+      zoom: Math.round((w.activeTab()?.zoom ?? 1) * 100),
+      update: u && (u.status === 'available' || u.status === 'ready') ? t(u.status === 'ready' ? 'upd_ready' : 'upd_available', { version: u.version }) : null,
+      groups: [
+        group('tab.new', 'window.new', 'window.newPrivate'),
+        group('page.history', 'page.downloads', 'page.bookmarks', 'page.passwords', 'page.extensions'),
+        group(['tools.menu', true], 'view.find', 'tools.print', 'tools.savePdf', 'page.taskManager'),
+        group('page.settings', 'page.about'),
+      ],
+    };
+  }
+
   appMenu(w: BrowserWindowController | null): Menu {
     const item = (id: string): MenuItemConstructorOptions => {
       const c = findCommand(id)!;
       return { label: t(c.title), accelerator: c.accelerator, enabled: this.commandEnabled(c, w), click: () => void this.runCommand(null, id) };
     };
     const hidden: MenuItemConstructorOptions[] = [];
+    // Chrome's other DevTools shortcuts: F12 everywhere, Ctrl+Shift+I on Windows/Linux.
+    for (const accel of ['F12', ...(process.platform === 'darwin' ? [] : ['Ctrl+Shift+I'])]) {
+      hidden.push({ label: 'DevTools', accelerator: accel, visible: false, acceleratorWorksWhenHidden: true, click: () => void this.runCommand(null, 'view.devtools') });
+    }
     for (let i = 1; i <= 9; i++) {
       hidden.push({ label: `Tab ${i}`, accelerator: `CmdOrCtrl+${i}`, visible: false, acceleratorWorksWhenHidden: true, click: () => {
         const f = this.focused();
@@ -816,11 +967,11 @@ export class BrowserApp {
       ...(process.platform === 'darwin'
         ? [{ label: 'Vizulla', submenu: [item('page.about'), item('app.checkUpdates'), { type: 'separator' }, item('page.settings'), { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] } as MenuItemConstructorOptions]
         : []),
-      { label: t('menu_file'), submenu: [item('tab.new'), item('window.new'), item('window.newPrivate'), item('tab.reopen'), { type: 'separator' }, item('tab.close'), item('page.import'), ...(process.platform !== 'darwin' ? [{ type: 'separator' } as const, { role: 'quit' } as const] : [])] },
+      { label: t('menu_file'), submenu: [item('tab.new'), item('window.new'), item('window.newPrivate'), item('window.closePrivate'), item('tab.reopen'), { type: 'separator' }, item('tab.close'), item('page.import'), ...(process.platform !== 'darwin' ? [{ type: 'separator' } as const, { role: 'quit' } as const] : [])] },
       { label: t('menu_edit'), submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, { type: 'separator' }, item('view.find'), item('nav.copyUrl')] },
-      { label: t('menu_view'), submenu: [item('nav.commandBar'), item('nav.focusAddress'), item('view.toggleSidebar'), item('view.toggleLayout'), item('view.classic'), item('view.reader'), item('ai.panel'), { type: 'separator' }, item('view.zoomIn'), item('view.zoomOut'), item('view.zoomReset'), item('view.fullscreen'), { type: 'separator' }, item('view.devtools')] },
+      { label: t('menu_view'), submenu: [item('nav.commandBar'), item('nav.focusAddress'), item('view.toggleSidebar'), item('view.toggleLayout'), item('view.classic'), item('view.reader'), item('ai.panel'), { type: 'separator' }, item('view.zoomIn'), item('view.zoomOut'), item('view.zoomReset'), item('view.fullscreen'), { type: 'separator' }, item('view.devtools'), item('view.inspect'), item('view.source'), item('page.taskManager')] },
       { label: t('menu_tabs'), submenu: [item('tab.next'), item('tab.previous'), item('tab.search'), item('tab.pin'), item('tab.mute'), item('tab.duplicate'), item('tab.split'), item('tab.archiveIdle'), { type: 'separator' }, item('space.next'), item('space.previous'), item('space.new'), item('focus.toggle'), ...hidden] },
-      { label: t('menu_go'), submenu: [item('nav.back'), item('nav.forward'), item('nav.reload'), item('nav.hardReload'), { type: 'separator' }, item('page.history'), item('page.bookmarks'), item('nav.bookmark'), item('page.downloads'), item('page.passwords'), item('page.privacy'), item('page.archive')] },
+      { label: t('menu_go'), submenu: [item('nav.back'), item('nav.forward'), item('nav.reload'), item('nav.hardReload'), { type: 'separator' }, item('page.history'), item('page.bookmarks'), item('nav.bookmark'), item('page.downloads'), item('page.passwords'), item('page.extensions'), item('page.privacy'), item('page.archive')] },
       { label: t('menu_window'), role: 'windowMenu' },
       { label: t('menu_help'), role: 'help', submenu: [item('page.about'), item('app.checkUpdates'), item('page.flags'), { label: t('menu_report_issue'), click: () => void shell.openExternal('https://github.com/') }] },
     ];
@@ -889,14 +1040,16 @@ export class BrowserApp {
     if (!this.langPreloaded.has(ses)) {
       this.langPreloaded.add(ses);
       try {
-        ses.registerPreloadScript({ type: 'frame', id: 'vz-lang', filePath: this.joinOut('preload', 'lang_preload.js') });
+        ses.registerPreloadScript({ type: 'frame', id: 'vz-page', filePath: this.joinOut('preload', 'page_preload.js') });
       } catch (err) {
-        console.warn('[vz] web language preload unavailable', err);
+        console.warn('[vz] page preload unavailable', err);
       }
     }
   }
 
   private readonly webLanguages = new WeakMap<Session, string[]>();
+  /** Fingerprinting protection settings for a frame (shields/platform_features.ts). */
+  farbleConfig: ((ses: Session, topUrl: string) => { level: 'off' | 'standard' | 'strict'; seed: number }) | null = null;
   private readonly langPreloaded = new WeakSet<Session>();
 
   prepareToQuit(): void {

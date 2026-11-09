@@ -7,6 +7,7 @@ import '../shared/select';
 import { VzPage, switchStyles, timeAgo } from '../shared/page_base';
 import { applyLocale, applyTheme } from '../shared/theme';
 import { t, getLocale, type StringKey } from '@vz/common/i18n';
+import { page } from '../shared/bridge';
 
 type Prefs = Record<string, unknown>;
 interface Data {
@@ -19,6 +20,8 @@ interface Data {
   shields: { engineVersion: number; ruleSource: string };
   isDefaultBrowser: boolean;
   encryption: string;
+  touchId: boolean;
+  mcp: { url: string | null; token: string; clients: string[]; activity: { at: number; client: string; tool: string; ok: boolean }[] } | null;
   features: Record<string, boolean>;
   sync: { enabled: boolean; deviceName: string; devices: { id: string; name: string; lastSeen: number }[]; lastSync: number | null; error: string | null; code?: string } | null;
 }
@@ -35,6 +38,7 @@ const SECTIONS = [
   { id: 'passwords', icon: 'key', title: 'settings_passwords' },
   { id: 'import', icon: 'download', title: 'settings_import' },
   { id: 'permissions', icon: 'lock', title: 'settings_permissions' },
+  { id: 'developer', icon: 'code', title: 'settings_developer' },
 ] as const;
 
 interface Row {
@@ -59,7 +63,8 @@ class VzSettings extends VzPage<Data> {
     note: { state: true },
   };
   section = location.pathname.replace(/^\/+/, '') || 'general';
-  filter = '';
+  /** ?q= opens Settings already searching (address-bar suggestions deep-link to one setting). */
+  filter = new URLSearchParams(location.search).get('q') ?? '';
   importSources: { index: number; name: string; profile: string; browser: string }[] | null = null;
   importResult = '';
   logins: { id: number; origin: string; username: string; breached: boolean | null }[] | null = null;
@@ -157,17 +162,37 @@ class VzSettings extends VzPage<Data> {
   }
 
   protected override loaded(): void {
+    page.on('changed', () => void this.invoke<Data>('init').then((d) => (this.data = d)));
+    const q = this.filter;
     this.go(this.section);
+    this.filter = q;
   }
 
   // ---- controls
 
+  /** The row being rendered: switches and selects take its label as their accessible name. */
+  private rowLabel = '';
+  private withLabel(label: string, control: () => unknown) {
+    this.rowLabel = label;
+    try {
+      return control();
+    } finally {
+      this.rowLabel = '';
+    }
+  }
+
+  private async copyMcp(what: 'token' | 'command'): Promise<void> {
+    await this.invoke('mcpCopy', what);
+    this.note = t('set_mcp_copied');
+    setTimeout(() => (this.note = ''), 2000);
+  }
+
   private sw(key: string) {
-    return this.toggle(!!this.p[key], (v) => void this.set(key, v), key);
+    return this.toggle(!!this.p[key], (v) => void this.set(key, v), this.rowLabel || key);
   }
 
   private select(key: string, options: { id: string; name: string }[]) {
-    return html`<vz-select label=${key} .value=${String(this.p[key] ?? '')} .options=${options} @change=${(e: CustomEvent<string>) => void this.set(key, e.detail)}></vz-select>`;
+    return html`<vz-select label=${this.rowLabel || key} .value=${String(this.p[key] ?? '')} .options=${options} @change=${(e: CustomEvent<string>) => void this.set(key, e.detail)}></vz-select>`;
   }
 
   private seg(key: string, options: { id: string; name: string }[]) {
@@ -189,6 +214,7 @@ class VzSettings extends VzPage<Data> {
       { section: 'general', label: L('set_search_engine'), desc: L('set_search_engine_desc'), control: () => this.select('search.engine', d.engines.map((e) => ({ ...e, icon: 'search' }))), keywords: 'google duckduckgo bing' },
       { section: 'general', label: L('set_custom_engine'), desc: this.engineError || L('set_custom_engine_desc'), keywords: 'search engine custom own site',
         control: () => this.customEngine() },
+      { section: 'general', label: L('set_search_suggestions'), desc: L('set_search_suggestions_desc'), control: () => this.sw('search.suggestions'), keywords: 'autocomplete suggestions search' },
       { section: 'general', label: L('set_language'), control: () => this.select('appearance.locale', [{ id: 'auto', name: L('set_language_auto') }, ...d.locales, { id: 'pseudo', name: 'Pseudo-locale (test)' }]), keywords: 'locale french kinyarwanda swahili' },
       { section: 'general', label: L('set_restore'), desc: L('set_restore_desc'), control: () => this.sw('tabs.restoreOnStartup'), keywords: 'startup session' },
       { section: 'general', label: L('set_default_browser'), desc: d.isDefaultBrowser ? L('set_default_yes') : L('set_default_no'),
@@ -206,8 +232,10 @@ class VzSettings extends VzPage<Data> {
       { section: 'tabs', label: L('set_archive_after'), control: () => this.number('tabs.archiveAfterHours', 1, 720, L('unit_hours')) },
       { section: 'tabs', label: L('set_memory_saver'), desc: L('set_memory_saver_desc'), control: () => this.number('tabs.memorySaverMinutes', 0, 1440, L('unit_minutes')), keywords: 'sleep discard ram' },
       { section: 'shields', label: L('set_shields'), desc: L('set_shields_desc'), control: () => this.sw('shields.enabled'), keywords: 'adblock ads trackers' },
-      { section: 'shields', label: L('set_shields_aggressive'), control: () => this.sw('shields.aggressive') },
-      { section: 'shields', label: L('set_3p_cookies'), desc: L('set_3p_cookies_desc'), control: () => this.sw('shields.blockThirdPartyCookies'), keywords: 'cookie tracking' },
+      { section: 'shields', label: L('set_block_ads'), desc: L('set_block_ads_desc'), control: () => this.sw('shields.blockAds'), keywords: 'ads adblock advertising ad-free show ads' },
+      { section: 'shields', label: L('set_ads_allowed'), desc: (this.p['shields.adsAllowedSites'] as string[]).length ? '' : L('set_ads_allowed_none'), control: () => html`${(this.p['shields.adsAllowedSites'] as string[]).map((s) => html`<button class="chip" style="border:0;cursor:pointer" @click=${async () => (this.data = { ...d, ...(await this.invoke<Data>('removeAdsAllowed', s)) })}>${s} ${icon('x', 10)}</button>`)}`, keywords: 'ads allowed sites' },
+      { section: 'shields', label: L('set_shields_aggressive'), desc: L('set_shields_aggressive_desc'), control: () => this.sw('shields.aggressive'), keywords: 'strict aggressive' },
+      { section: 'shields', label: L('set_3p_cookies'), desc: `${L('set_3p_cookies_desc')} ${L('set_restart_note')}`, control: () => this.sw('shields.blockThirdPartyCookies'), keywords: 'cookie tracking' },
       { section: 'shields', label: L('set_https_first'), desc: L('set_https_first_desc'), control: () => this.sw('shields.httpsFirst'), keywords: 'ssl secure' },
       { section: 'shields', label: L('set_doh'), desc: L('set_doh_desc'), control: () => this.seg('shields.doh', [{ id: 'off', name: L('doh_off') }, { id: 'automatic', name: L('doh_auto') }, { id: 'secure', name: L('doh_secure') }]), keywords: 'dns' },
       { section: 'shields', label: L('set_fingerprinting'), desc: L('set_fingerprinting_desc'), control: () => this.seg('shields.fingerprinting', [{ id: 'off', name: L('fp_off') }, { id: 'standard', name: L('fp_standard') }, { id: 'strict', name: L('fp_strict') }]) },
@@ -215,6 +243,18 @@ class VzSettings extends VzPage<Data> {
       { section: 'shields', label: L('set_shields_lists'), desc: t('set_shields_lists_desc', { source: d.shields.ruleSource, version: d.shields.engineVersion }),
         control: () => html`<button class="btn" @click=${async () => (this.note = await this.invoke<string>('updateShieldsLists'))}>${L('set_check_updates')}</button>` },
       { section: 'shields', label: L('set_exceptions'), desc: (this.p['shields.siteExceptions'] as string[]).join(', ') || L('set_exceptions_none'), control: () => html`${(this.p['shields.siteExceptions'] as string[]).map((s) => html`<button class="chip" style="border:0;cursor:pointer" @click=${async () => (this.data = { ...d, ...(await this.invoke<Data>('removeShieldsException', s)) })}>${s} ${icon('x', 10)}</button>`)}` },
+      { section: 'shields', label: L('set_private_capture'), desc: L('set_private_capture_desc'), control: () => this.sw('privacy.privateCaptureProtection'), keywords: 'private incognito screenshot screen recording' },
+      ...(d.touchId ? [{ section: 'shields', label: L('set_lock_private'), desc: L('set_lock_private_desc'), control: () => this.sw('privacy.lockPrivate'), keywords: 'private incognito lock touch id' }] : []),
+      { section: 'developer', label: L('set_mcp'), desc: L('set_mcp_desc'), control: () => this.sw('dev.mcp'), keywords: 'mcp ai claude code cursor developer agent api' },
+      ...(this.p['dev.mcp'] && d.mcp
+        ? [
+            { section: 'developer', label: L('set_mcp_endpoint'), desc: d.mcp.url ?? '…', control: () => html`<button class="btn" @click=${() => void this.copyMcp('command')}>${icon('copy', 13)} ${L('set_mcp_copy_command')}</button>` },
+            { section: 'developer', label: L('set_mcp_token'), desc: `${d.mcp.token.slice(0, 4)}••••••••••••${d.mcp.token.slice(-4)}`, control: () => html`<button class="btn" @click=${() => void this.copyMcp('token')}>${L('set_mcp_copy_token')}</button>
+              <button class="btn ghost" @click=${async () => (this.data = { ...d, ...(await this.invoke<Data>('mcpNewToken')) })}>${icon('refresh', 13)} ${L('set_mcp_new_token')}</button>` },
+            { section: 'developer', label: L('set_mcp_clients'), desc: d.mcp.clients.length ? '' : L('set_mcp_clients_none'), control: () => html`${d.mcp!.clients.map((c) => html`<button class="chip" style="border:0;cursor:pointer" @click=${async () => (this.data = { ...d, ...(await this.invoke<Data>('mcpRemoveClient', c)) })}>${c} ${icon('x', 10)}</button>`)}` },
+            ...(d.mcp.activity.length ? [{ section: 'developer', label: L('set_mcp_activity'), desc: d.mcp.activity.map((x) => `${new Date(x.at).toLocaleTimeString()} · ${x.client} · ${x.tool}${x.ok ? '' : ' ✕'}`).join('\n'), control: () => html`` }] : []),
+          ]
+        : []),
       { section: 'shields', label: L('set_telemetry'), desc: L('set_telemetry_desc'), control: () => this.sw('privacy.telemetry'), keywords: 'metrics usage' },
       { section: 'shields', label: L('set_crash'), desc: L('set_crash_desc'), control: () => this.sw('privacy.crashReports') },
       { section: 'shields', label: L('set_clear_data'), desc: L('set_clear_data_desc'), control: () => html`<button class="btn danger" @click=${() => this.clearData()}>${L('action_clear')}…</button>`, keywords: 'history cookies cache delete' },
@@ -260,7 +300,7 @@ class VzSettings extends VzPage<Data> {
         ${q ? html`<h2 class="sec-title">${t('set_results', { count: visible.length })}</h2>` : html`<h2 class="sec-title">${t(SECTIONS.find((s) => s.id === this.section)?.title as StringKey)}</h2>`}
         ${!q && this.section === 'ai' ? this.renderAi() : nothing}
         ${!q && this.section === 'sync' ? this.renderSync() : nothing}
-        ${visible.length ? html`<div class="card rise">${visible.map((r) => html`<div class="row"><div class="grow"><div class="title">${r.label}</div>${r.desc ? html`<div class="desc">${r.desc}</div>` : nothing}</div>${r.control()}</div>`)}</div>` : nothing}
+        ${visible.length ? html`<div class="card rise">${visible.map((r) => html`<div class="row"><div class="grow"><div class="title">${r.label}</div>${r.desc ? html`<div class="desc">${r.desc}</div>` : nothing}</div>${this.withLabel(r.label, r.control)}</div>`)}</div>` : nothing}
         ${!q && this.section === 'agent' && this.data!.features.VizullaAgentStageB ? this.renderAgentProfile() : nothing}
         ${!q && this.section === 'passwords' ? this.renderPasswords() : nothing}
         ${!q && this.section === 'import' ? this.renderImport() : nothing}

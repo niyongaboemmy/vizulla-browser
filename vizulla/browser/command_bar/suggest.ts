@@ -32,8 +32,15 @@ export interface SuggestSources {
   intents?(q: string): { label: string; route: string; confidence: number }[];
   /** R2: natural-language command mapping (only commands from the registry). */
   nlCommand?(q: string): { commandId: string; title: string; args?: Record<string, string> } | null;
-  strings: { goTo: string; searchFor: string; ask: string; switchToTab: string; restoreArchived: string };
+  /** Vizulla's own settings, pages and tools (destinations.ts), titles resolved. */
+  destinations?(q: string, limit: number, group?: 'settings' | 'pages' | 'tools'): { id: string; title: string; detail: string; icon: string; target: string }[];
+  strings: { goTo: string; searchFor: string; ask: string; switchToTab: string; restoreArchived: string; scopes?: Record<Scope, string> };
 }
+
+/** "@tabs dentist" searches only open tabs, as in Chrome's omnibox. */
+export const SCOPES = ['tabs', 'history', 'bookmarks', 'settings', 'tools'] as const;
+export type Scope = (typeof SCOPES)[number];
+const SCOPE_ICONS: Record<Scope, string> = { tabs: 'layers', history: 'history', bookmarks: 'star', settings: 'settings', tools: 'zap' };
 
 export type SuggestMode = 'palette' | 'address' | 'tab-search' | 'ask';
 
@@ -44,7 +51,7 @@ export function suggest(input: string, mode: SuggestMode, src: SuggestSources): 
   const out: Suggestion[] = [];
   const seen = new Set<string>();
   const push = (s: Suggestion) => {
-    const key = s.kind === 'command' || s.kind === 'ask' || s.kind === 'search' || s.kind === 'nl-command' ? s.id : `${s.kind === 'tab' ? 'tab' : 'url'}:${s.detail}`;
+    const key = s.kind === 'command' || s.kind === 'ask' || s.kind === 'search' || s.kind === 'nl-command' || s.kind === 'destination' || s.kind === 'scope' ? s.id : `${s.kind === 'tab' ? 'tab' : 'url'}:${s.detail}`;
     if (seen.has(key)) return;
     seen.add(key);
     out.push(s);
@@ -56,6 +63,29 @@ export function suggest(input: string, mode: SuggestMode, src: SuggestSources): 
       push({ id: `archive:${a.id}`, kind: 'archive', title: a.title || displayUrl(a.url), detail: `${src.strings.restoreArchived} · ${displayUrl(a.url)}`, favicon: a.favicon, section: 'history' });
     }
     return { input, route: route.route === 'empty' ? 'empty' : route.route, chips: [], suggestions: out, elapsedMs: performance.now() - t0 };
+  }
+
+  // @scopes: "@" lists them; "@tabs foo" searches only that kind of result.
+  const scoped = /^@(\w*)(?:\s+(.*))?$/.exec(q);
+  if (scoped) {
+    const name = scoped[1]!.toLowerCase();
+    const rest = scoped[2]?.trim() ?? '';
+    const scope = SCOPES.find((x) => x === name);
+    if (!scope || scoped[2] === undefined) {
+      for (const sc of SCOPES.filter((x) => x.startsWith(name))) {
+        push({ id: `scope:@${sc} `, kind: 'scope', title: `@${sc}`, detail: src.strings.scopes?.[sc] ?? sc, icon: SCOPE_ICONS[sc], section: 'top' });
+      }
+      if (out.length) return { input, route: 'empty', chips: [], suggestions: out, elapsedMs: performance.now() - t0 };
+    } else {
+      if (scope === 'tabs') for (const t of rankTabs(src.tabs(), rest).slice(0, 12)) push(tabRow(t, src));
+      if (scope === 'history') for (const h of src.history(rest, 12)) push({ id: `nav:${h.url}`, kind: 'history', title: h.title || displayUrl(h.url), detail: displayUrl(h.url), favicon: h.favicon, section: 'history' });
+      if (scope === 'bookmarks') for (const b of src.bookmarks(rest, 12)) push({ id: `nav:${b.url}`, kind: 'bookmark', title: b.title || displayUrl(b.url), detail: displayUrl(b.url), icon: 'star', section: 'history' });
+      if (scope === 'settings' || scope === 'tools') {
+        for (const d of src.destinations?.(rest, 12, scope === 'settings' ? 'settings' : 'tools') ?? []) push(destRow(d));
+        if (scope === 'tools') for (const c of matchCommands(rest, src.commandTitle, src.commandEnabled, 8)) push(cmdRow(c, src));
+      }
+      return { input, route: 'empty', chips: [], suggestions: out.slice(0, 14), elapsedMs: performance.now() - t0 };
+    }
   }
 
   if (route.route === 'empty') {
@@ -85,6 +115,9 @@ export function suggest(input: string, mode: SuggestMode, src: SuggestSources): 
   }
 
   for (const t of rankTabs(src.tabs(), q).slice(0, 3)) push(tabRow(t, src));
+
+  // Vizulla's own settings, pages and tools ("dark mode", "block ads", "passwords").
+  if (q.length >= 2 && route.route !== 'navigate') for (const d of src.destinations?.(q, 3) ?? []) push(destRow(d));
 
   const nl = src.nlCommand?.(q);
   if (nl) push({ id: `nl:${nl.commandId}:${JSON.stringify(nl.args ?? {})}`, kind: 'nl-command', title: nl.title, detail: '', icon: 'sparkle', section: 'commands' });
@@ -116,6 +149,10 @@ function rankTabs(tabs: TabCandidate[], q: string): TabCandidate[] {
 
 function tabRow(t: TabCandidate, src: SuggestSources): Suggestion {
   return { id: `tab:${t.id}`, kind: 'tab', title: t.title || displayUrl(t.url), detail: `${src.strings.switchToTab} · ${t.spaceName}`, favicon: t.favicon, section: 'tabs' };
+}
+
+function destRow(d: { id: string; title: string; detail: string; icon: string; target: string }): Suggestion {
+  return { id: d.target, kind: 'destination', title: d.title, detail: d.detail, icon: d.icon, section: 'browser' };
 }
 
 function cmdRow(c: CommandDef, src: SuggestSources): Suggestion {

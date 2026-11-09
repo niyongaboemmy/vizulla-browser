@@ -3,7 +3,7 @@
 //
 // View stack (bottom → top): chrome UI (sidebar, toolbar, panels) · tab view(s)
 // placed in the content rect the chrome UI reports · overlay (when open).
-import { BaseWindow, clipboard, Menu, nativeTheme, screen, WebContentsView, type WebContents } from 'electron';
+import { BaseWindow, clipboard, Menu, nativeTheme, screen, systemPreferences, WebContentsView, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -21,7 +21,7 @@ import { t } from '@vz/common/i18n';
 import type { PanelKind, Rect, SpaceColor, SpaceIcon, TabInfo, ToastInfo, WindowState } from '@vz/common/types';
 import { kVizullaAutoArchive } from '../vizulla_features';
 
-const isMac = process.platform === 'darwin';
+import { hasGlass, hasMica, isMac } from './glass';
 
 export interface CreateTabOptions {
   url?: string;
@@ -87,10 +87,11 @@ export class BrowserWindowController extends EventEmitter {
       show: false,
       title: profile.isPrivate ? 'Vizulla — Private' : 'Vizulla',
       // macOS: transparent, so the window's vibrancy (frosted glass) shows through the translucent chrome.
-      backgroundColor: isMac ? '#00000000' : windowBackground(this.resolvedTheme()),
+      // Windows 11: the same with Mica. Older Windows and Linux keep a solid frame.
+      backgroundColor: hasGlass ? '#00000000' : windowBackground(this.resolvedTheme()),
       ...(isMac
         ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'sidebar', visualEffectState: 'followWindow' }
-        : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#eef1f6' : '#0f172a', height: 40 } }),
+        : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#eef1f6' : '#0f172a', height: 40 }, ...(hasMica ? { backgroundMaterial: 'mica' } : {}) }),
     } as Electron.BaseWindowConstructorOptions);
     this.chrome = new WebContentsView({
       webPreferences: {
@@ -129,6 +130,8 @@ export class BrowserWindowController extends EventEmitter {
     this.win.on('enter-full-screen', () => this.pushState());
     this.win.on('leave-full-screen', () => this.pushState());
     this.win.on('close', () => this.onClose());
+    // Private windows: no screenshots or screen recording of their content (on by default).
+    if (profile.isPrivate && prefs.get('privacy.privateCaptureProtection')) this.win.setContentProtection(true);
     this.chrome.webContents.on('did-finish-load', () => {
       this.chromeReady = true;
       this.pushState(true);
@@ -235,6 +238,12 @@ export class BrowserWindowController extends EventEmitter {
     };
     this.unwire.set(tab.id, () => offs.forEach((off) => off()));
     on('updated', () => this.pushState());
+    // Extensions see every live tab (chrome.tabs); a discarded tab rejoins when it wakes.
+    on('live', (wc: Electron.WebContents) => {
+      this.app.extensions.addTab(wc, this);
+      if (this.activeTab() === tab) this.app.extensions.selectTab(wc);
+    });
+    if (tab.wc) this.app.extensions.addTab(tab.wc, this);
     on('main-frame-navigation-start', () => {
       if (tab.wc) profile.shields.resetCounts(tab.wc.id);
     });
@@ -351,6 +360,31 @@ export class BrowserWindowController extends EventEmitter {
     tab.zoom = next;
     this.toast(t('toast_zoom', { pct: Math.round(next * 100) }), undefined, 1500);
     this.pushState();
+  }
+
+  /** Private windows only: pages hidden until the user unlocks with Touch ID. */
+  locked = false;
+
+  async lockPrivate(): Promise<void> {
+    if (!this.profile.isPrivate || this.locked || this.destroyed) return;
+    this.locked = true;
+    this.syncViews();
+    this.pushState();
+    for (;;) {
+      const r = await this.overlay.dialog<{ action: 'unlock' } | null>({ type: 'private-locked' });
+      if (this.destroyed) return;
+      if (r?.action !== 'unlock') continue;
+      try {
+        await systemPreferences.promptTouchID(t('private_unlock_reason'));
+        break;
+      } catch {
+        /* cancelled: stay locked */
+      }
+    }
+    this.locked = false;
+    this.syncViews();
+    this.pushState();
+    this.focusActive();
   }
 
   discardTab(id: number): boolean {
@@ -531,11 +565,12 @@ export class BrowserWindowController extends EventEmitter {
     if (this.destroyed) return;
     const want = new Set<WebContentsView>();
     const active = this.activeTab();
-    if (active) {
+    // A locked private window shows no page until Touch ID (privacy.lockPrivate).
+    if (active && !this.locked) {
       active.ensureLive();
       if (active.view) want.add(active.view);
     }
-    if (this.splitTabId !== null) {
+    if (this.splitTabId !== null && !this.locked) {
       const s = this.tabs.get(this.splitTabId);
       if (s?.view && this.model.get(this.splitTabId)?.spaceId === this.model.activeSpaceId) want.add(s.view);
       else this.splitTabId = null;
@@ -569,8 +604,8 @@ export class BrowserWindowController extends EventEmitter {
     const tab = this.activeTab();
     const wc = tab?.wc;
     if (!wc) return;
-    if (tab.url.startsWith('vizulla://newtab')) wc.focus();
-    else wc.focus();
+    wc.focus();
+    this.app.extensions.selectTab(wc);
   }
 
   // ---------------------------------------------------------------- toasts
@@ -651,12 +686,15 @@ export class BrowserWindowController extends EventEmitter {
       agent: this.app.agentBarState(this),
       platform: this.profile.isPrivate ? `${process.platform}:private` : process.platform,
       locale: this.app.locale,
-      theme: prefs.get('appearance.theme'),
+      // Private windows are always dark, like Chrome's Incognito.
+      theme: this.profile.isPrivate ? 'dark' : prefs.get('appearance.theme'),
       accent: spaces.find((s) => s.id === this.model.activeSpaceId)?.color ?? prefs.get('appearance.accent'),
       density: prefs.get('appearance.density'),
       aiMode: prefs.get('ai.mode'),
       features: this.profile.features.snapshot(),
       update: this.app.updates.info(),
+      glass: hasGlass && this.profile.prefs.get('appearance.theme') !== 'high-contrast',
+      extensions: this.profile.isPrivate ? { pinned: [], count: 0, activeWcId: null } : { ...this.app.extensions.toolbar(), activeWcId: this.activeTab()?.wc?.id ?? null },
       profile: { ...pick(this.app.profiles.current()), count: this.app.profiles.list().length },
       fullscreen: this.win.isFullScreen() || this.htmlFullscreen,
       bookmarks: prefs.get('tabs.classic') ? this.profile.history.bookmarks().slice(0, 30).map((b) => ({ url: b.url, title: b.title })) : [],

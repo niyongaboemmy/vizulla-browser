@@ -1,6 +1,6 @@
 // R2 privacy features (Track G): fingerprinting protection config and cookie
 // banner auto-reject (P4-BRW-10/11). Both respect Shields site exceptions.
-import { ipcMain } from 'electron';
+import type { Session } from 'electron';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { BrowserApp } from '../browser_app';
 import type { WebTab } from '../tabs/web_tab';
@@ -52,18 +52,16 @@ export function cookieBannerScript(): string {
 
 export function installPlatformFeatures(app: BrowserApp): void {
   const p = app.profile;
-  const sessionSecret = randomBytes(32); // farbling changes every browser session
-  ipcMain.on('vz:farble-config', (e) => {
-    const top = e.senderFrame?.top?.url ?? e.sender.getURL();
-    const level = p.shields.isSiteEnabled(top) ? p.prefs.get('shields.fingerprinting') : 'off';
-    const seed = createHmac('sha256', sessionSecret).update(siteOf(top)).digest().readUInt32LE(0);
-    e.returnValue = { level, seed };
-  });
-  try {
-    p.session.registerPreloadScript({ type: 'frame', id: 'vz-farble', filePath: app.joinOut('preload', 'farble_preload.js') });
-  } catch (err) {
-    console.warn('[vz] fingerprinting protection unavailable', err);
-  }
+  // Farbling changes every browser session, and every private window has its own secret,
+  // so private browsing can't be linked to normal browsing.
+  const secrets = new WeakMap<Session, Buffer>();
+  app.farbleConfig = (ses, top) => {
+    let secret = secrets.get(ses);
+    if (!secret) secrets.set(ses, (secret = randomBytes(32)));
+    // Private windows always get strict protection (unless the site is an exception).
+    const level = !p.shields.isSiteEnabled(top) ? 'off' : ses !== p.session ? 'strict' : p.prefs.get('shields.fingerprinting');
+    return { level, seed: createHmac('sha256', secret).update(siteOf(top)).digest().readUInt32LE(0) };
+  };
   app.hooks.windowCreated.push((w) => {
     w.on('tab-dom-ready', (tab: WebTab) => {
       if (!p.prefs.get('shields.cookieBanners') || !tab.wc || !/^https?:/.test(tab.url) || !p.shields.isSiteEnabled(tab.url)) return;

@@ -1,5 +1,6 @@
 // Vizulla browser process entry point.
 import { app, BrowserWindow, crashReporter, session } from 'electron';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BRANDING } from './branding';
 import { registerVizullaScheme } from '@vz/browser/ui/webui_protocol';
@@ -22,6 +23,18 @@ app.commandLine.appendSwitch('disable-domain-reliability');
 app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('disable-features', 'InterestFeedContentSuggestions,MediaRouter,OptimizationHints,Translate,AutofillServerCommunication,CertificateTransparencyComponentUpdater');
 app.commandLine.appendSwitch('enable-features', 'PartitionedCookies,ThirdPartyStoragePartitioning');
+// Third-party cookies (SHD-04) are blocked by Chromium itself: no per-request hook in
+// the browser process (that cost ~25% on request-heavy pages). Read before the profile
+// loads, so a change in Settings applies after a restart.
+if (startupPref('shields.blockThirdPartyCookies') !== false) app.commandLine.appendSwitch('test-third-party-cookie-phaseout');
+
+function startupPref(key: string): unknown {
+  try {
+    return (JSON.parse(readFileSync(join(app.getPath('userData'), 'Preferences.json'), 'utf8')) as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
 
 // Never block on a modal error dialog in the browser process: log and keep going.
 process.on('uncaughtException', (e) => console.error('[vz] uncaught exception', e));

@@ -19,6 +19,13 @@ export abstract class VzPage<T> extends LitElement {
       .then((r) => {
         applyLocale(r.locale);
         applyTheme(r.theme, r.accent);
+        if ((r as { glass?: boolean }).glass) {
+          const root = document.documentElement.style;
+          root.setProperty('--vz-page-bg', 'color-mix(in srgb, var(--vz-bg) 74%, transparent)');
+          root.setProperty('--vz-card-bg', 'color-mix(in srgb, var(--vz-bg-elev) 72%, transparent)');
+          root.setProperty('--vz-ntp-bg', 'color-mix(in srgb, var(--vz-toolbar) 72%, transparent)');
+          document.documentElement.style.background = 'transparent';
+        }
         this.data = r.data;
         this.loaded();
       })

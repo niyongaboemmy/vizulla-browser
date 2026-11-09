@@ -1,7 +1,7 @@
 // A Profile owns per-profile services (the KeyedService pattern, handbook §5).
 // Regular profiles persist to disk; private profiles keep everything in memory
 // and share only the read-mostly services of their parent (prefs, Shields engine).
-import { safeStorage, session as electronSession, type Session } from 'electron';
+import { safeStorage, session as electronSession, webContents, type Session } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { FeatureList, parseFeatureSwitches } from './vizulla_features';
@@ -92,7 +92,10 @@ export class Profile {
       session: electronSession.defaultSession,
       parent: null,
     });
-    shields.on('blocked', (e: { pageUrl: string; category: string }) => {
+    shields.on('blocked', (e: { pageUrl: string; category: string; webContentsId?: number }) => {
+      // Shields is shared with private windows; their activity never reaches the log.
+      const wc = e.webContentsId !== undefined ? webContents.fromId(e.webContentsId) : null;
+      if (wc && wc.session !== p.session) return;
       try {
         p.privacy.recordBlocked(new URL(e.pageUrl).hostname, e.category);
       } catch {

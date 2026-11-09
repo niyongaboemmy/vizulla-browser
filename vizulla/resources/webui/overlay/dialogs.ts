@@ -5,6 +5,7 @@ import { icon } from '../shared/icons';
 import { t } from '@vz/common/i18n';
 import { SPACE_COLORS, SPACE_ICONS } from '@vz/common/types';
 import { ACCENTS } from '@vz/common/tokens';
+import qrcode from 'qrcode-generator';
 
 export interface DialogHost {
   resolve(result: unknown): void;
@@ -83,6 +84,70 @@ function permIcon(p: string): string {
 
 // Save or update a login after a sign-in (passwords). The password itself never
 // reaches this dialog: it shows dots, and the browser keeps the value.
+registerDialog('mcp-approve', (d, host) => html`
+  <div class="pw-head"><span class="pw-key">${icon('code', 20)}</span>
+    <div><h2 id="dlg-title">${t('mcp_approve_title', { client: String(d.client ?? '') })}</h2></div></div>
+  <p class="muted">${t('mcp_approve_body')}</p>
+  <ul class="perm-list"><li>${t('mcp_can_tabs')}</li><li>${t('mcp_can_read')}</li><li>${t('mcp_can_open')}</li></ul>
+  <div class="actions">
+    <span style="flex:1"></span>
+    <button class="btn" @click=${() => host.resolve({ action: 'deny' })}>${t('mcp_deny')}</button>
+    <button class="btn primary" autofocus @click=${() => host.resolve({ action: 'allow' })}>${t('mcp_allow')}</button>
+  </div>`);
+
+registerDialog('qr', (d, host) => {
+  const qr = qrcode(0, 'M');
+  qr.addData(String(d.url ?? ''));
+  qr.make();
+  const svg = qr.createSvgTag({ cellSize: 6, margin: 3, scalable: true });
+  const png = () => {
+    const n = qr.getModuleCount() + 6;
+    const c = document.createElement('canvas');
+    c.width = c.height = n * 10;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#000';
+    for (let r = 0; r < qr.getModuleCount(); r++) for (let k = 0; k < qr.getModuleCount(); k++) if (qr.isDark(r, k)) g.fillRect((k + 3) * 10, (r + 3) * 10, 10, 10);
+    return c.toDataURL('image/png');
+  };
+  return html`
+    <div class="qr-hero">
+      <h2 id="dlg-title">${t('tool_qr_title')}</h2>
+      <div class="qr-code" role="img" aria-label=${t('tool_qr')} .innerHTML=${svg}></div>
+      <div class="muted qr-url">${d.url}</div>
+    </div>
+    <div class="actions">
+      <button class="btn" @click=${() => host.resolve({ action: 'save', png: png() })}>${icon('download', 14)} ${t('tool_qr_save')}</button>
+      <span style="flex:1"></span>
+      <button class="btn" @click=${() => host.cancel()}>${t('action_close')}</button>
+      <button class="btn primary" autofocus @click=${() => host.resolve({ action: 'copy' })}>${icon('copy', 14)} ${t('tool_qr_copy')}</button>
+    </div>`;
+});
+
+registerDialog('private-locked', (_d, host) => html`
+  <div class="lock-hero"><span class="lock-orb">${icon('lock', 28)}</span>
+    <h2 id="dlg-title">${t('private_locked_title')}</h2>
+    <p class="muted">${t('private_locked_body')}</p>
+    <button class="btn primary" autofocus @click=${() => host.resolve({ action: 'unlock' })}>${icon('key', 15)} ${t('private_unlock')}</button>
+  </div>`);
+
+registerDialog('add-extension', (d, host) => {
+  const perms = (d.permissions as string[] | undefined) ?? [];
+  const line = (p: string) => (p.startsWith('sites:') ? t('extperm_sites', { sites: p.slice(6) }) : p === 'all-sites' ? t('extperm_all_sites') : t(`extperm_${p}` as never));
+  return html`
+    <div class="pw-head">${d.icon ? html`<img src=${String(d.icon)} alt="" width="40" height="40" style="border-radius:10px" />` : html`<span class="pw-key">${icon('puzzle', 20)}</span>`}
+      <div><h2 id="dlg-title">${t('ext_add_title', { name: String(d.name ?? '') })}</h2></div></div>
+    ${perms.length
+      ? html`<p class="muted" style="margin:4px 0 6px">${t('ext_add_can')}</p><ul class="perm-list">${perms.map((p) => html`<li>${line(p)}</li>`)}</ul>`
+      : html`<p class="muted">${t('ext_add_plain')}</p>`}
+    <div class="actions">
+      <span style="flex:1"></span>
+      <button class="btn" @click=${() => host.resolve({ action: 'cancel' })}>${t('action_cancel')}</button>
+      <button class="btn primary" autofocus @click=${() => host.resolve({ action: 'add' })}>${t('ext_add')}</button>
+    </div>`;
+});
+
 registerDialog('save-password', (d, host) => {
   const draft = host.draft as { username?: string };
   draft.username ??= String(d.username ?? '');

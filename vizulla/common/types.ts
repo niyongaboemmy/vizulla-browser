@@ -100,6 +100,10 @@ export interface WindowState {
   aiMode: AiMode;
   features: Record<string, boolean>;
   fullscreen: boolean;
+  /** The frame is translucent over a system material (macOS vibrancy, Windows 11 Mica). */
+  glass: boolean;
+  /** Extensions pinned to the toolbar, how many are loaded, and the tab their buttons act on. */
+  extensions: { pinned: string[]; count: number; activeWcId: number | null };
   /** Classic mode only: the bookmarks bar (first folder level). */
   bookmarks: { url: string; title: string }[];
   /** This window's profile (toolbar avatar). `count` is how many profiles exist. */
@@ -127,7 +131,7 @@ export interface Rect {
   height: number;
 }
 
-export type SuggestionKind = 'url' | 'search' | 'tab' | 'history' | 'bookmark' | 'command' | 'ask' | 'memory' | 'archive' | 'nl-command';
+export type SuggestionKind = 'url' | 'search' | 'tab' | 'history' | 'bookmark' | 'command' | 'ask' | 'memory' | 'archive' | 'nl-command' | 'destination' | 'scope';
 
 export interface Suggestion {
   id: string;
@@ -138,7 +142,7 @@ export interface Suggestion {
   shortcut?: string;
   icon?: string;
   favicon?: string | null;
-  section: 'top' | 'tabs' | 'commands' | 'memory' | 'history' | 'search' | 'ai';
+  section: 'top' | 'tabs' | 'browser' | 'commands' | 'memory' | 'history' | 'search' | 'ai';
   /** Commands that change data are marked so the UI can show a confirmation affordance. */
   destructive?: boolean;
 }

@@ -1,17 +1,34 @@
-// Fingerprinting protection (P4-BRW-10, SHD-03): runs in every frame of web
-// sessions. Adds tiny, deterministic per-site/per-session noise to canvas,
-// audio, and WebGL readouts so they can't identify the device across sites,
-// while pages still render correctly. "strict" also normalizes hardware hints.
+// Web pages (every frame of web sessions): one synchronous call for the page's
+// settings, then (1) navigator.language(s) report the browser's chosen language,
+// matching Accept-Language, and (2) fingerprinting protection (P4-BRW-10, SHD-03)
+// adds tiny deterministic per-site noise to canvas, audio and WebGL readouts.
+// One call instead of one per feature: each blocks the frame while it starts.
 import { contextBridge, ipcRenderer } from 'electron';
 
+interface PageConfig {
+  langs: string[];
+  farble: { level: 'off' | 'standard' | 'strict'; seed: number };
+}
+
 if (/^https?:$/.test(location.protocol)) {
-  let cfg: { level: 'off' | 'standard' | 'strict'; seed: number } = { level: 'off', seed: 0 };
+  let cfg: PageConfig = { langs: [], farble: { level: 'off', seed: 0 } };
   try {
-    cfg = ipcRenderer.sendSync('vz:farble-config') as typeof cfg;
+    cfg = ipcRenderer.sendSync('vz:page-config') as PageConfig;
   } catch {
     /* no config: leave the page alone */
   }
-  if (cfg.level !== 'off') {
+  if (Array.isArray(cfg.langs) && cfg.langs.length) {
+    contextBridge.executeInMainWorld({
+      func: (list: string[]) => {
+        const frozen = Object.freeze([...list]);
+        const proto = Navigator.prototype;
+        Object.defineProperty(proto, 'language', { get: () => frozen[0], configurable: true, enumerable: true });
+        Object.defineProperty(proto, 'languages', { get: () => frozen, configurable: true, enumerable: true });
+      },
+      args: [cfg.langs],
+    });
+  }
+  if (cfg.farble.level !== 'off') {
     contextBridge.executeInMainWorld({
       func: (seed: number, strict: boolean) => {
         let s = seed >>> 0 || 1;
@@ -71,7 +88,7 @@ if (/^https?:$/.test(location.protocol)) {
           Object.defineProperty(Navigator.prototype, 'deviceMemory', { get: () => 8, configurable: true });
         }
       },
-      args: [cfg.seed, cfg.level === 'strict'],
+      args: [cfg.farble.seed, cfg.farble.level === 'strict'],
     });
   }
 }

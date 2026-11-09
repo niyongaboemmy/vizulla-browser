@@ -18,4 +18,26 @@ if (location.protocol === 'vizulla:') {
     },
     platform: process.platform,
   });
+
+  // The window chrome draws extension buttons (electron-chrome-extensions' browserAction
+  // API, always for Vizulla's extension session). Only vizulla://chrome gets this.
+  if (location.host === 'chrome') {
+    const P = 'vizulla-extensions';
+    const call = (name: string, ...args: unknown[]) => ipcRenderer.invoke('crx-msg-remote', P, name, ...args);
+    let observing = false;
+    const watchers = new Set<() => void>();
+    ipcRenderer.on('browserAction.update', () => watchers.forEach((fn) => fn()));
+    contextBridge.exposeInMainWorld('vzExt', {
+      getState: () => call('browserAction.getState'),
+      activate: (details: unknown) => call('browserAction.activate', details),
+      observe: (fn: () => void) => {
+        watchers.add(fn);
+        if (!observing) {
+          observing = true;
+          void call('browserAction.addObserver');
+        }
+        return () => watchers.delete(fn);
+      },
+    });
+  }
 }

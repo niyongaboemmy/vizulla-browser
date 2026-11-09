@@ -4,7 +4,7 @@ import { app, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ShieldsEngine, type RequestCategory } from '@vz/components/shields_engine/shields_engine';
+import { isKnownTracker, ShieldsEngine, type RequestCategory } from '@vz/components/shields_engine/shields_engine';
 import { verifyBlob, type ListManifest } from '@vz/components/shields_engine/list_signature';
 import { siteOf } from '@vz/common/url';
 import type { PrefsService } from '../prefs/prefs_service';
@@ -20,6 +20,9 @@ export interface BlockedEvent {
 export interface ShieldsStatus {
   enabled: boolean;
   siteEnabled: boolean;
+  blockAds: boolean;
+  adsAllowed: boolean;
+  strict: boolean;
   site: string;
   blocked: { ads: number; trackers: number; other: number; total: number };
   engineVersion: number;
@@ -58,6 +61,20 @@ export class ShieldsService extends EventEmitter {
     return this.isEnabled && !this.prefs.get('shields.siteExceptions').includes(siteOf(url));
   }
 
+  /** Ads show on this page: blocking turned off everywhere, or allowed for this site. */
+  adsAllowed(url: string): boolean {
+    return !this.prefs.get('shields.blockAds') || this.prefs.get('shields.adsAllowedSites').includes(siteOf(url));
+  }
+
+  setAdsAllowed(url: string, allowed: boolean): void {
+    const site = siteOf(url);
+    if (!site) return;
+    const list = new Set(this.prefs.get('shields.adsAllowedSites'));
+    if (allowed) list.add(site);
+    else list.delete(site);
+    this.prefs.set('shields.adsAllowedSites', [...list].sort());
+  }
+
   setSiteEnabled(url: string, enabled: boolean): void {
     const site = siteOf(url);
     if (!site) return;
@@ -72,6 +89,9 @@ export class ShieldsService extends EventEmitter {
     return {
       enabled: this.isEnabled,
       siteEnabled: this.isSiteEnabled(url),
+      blockAds: this.prefs.get('shields.blockAds'),
+      adsAllowed: this.adsAllowed(url),
+      strict: this.prefs.get('shields.aggressive'),
       site: siteOf(url),
       blocked: { ...c, total: c.ads + c.trackers + c.other },
       engineVersion: this.engineVersion,
@@ -109,8 +129,13 @@ export class ShieldsService extends EventEmitter {
         if (!this.isEnabled || d.resourceType === 'mainFrame') return null;
         const pageUrl = initiatorOf(d);
         if (!pageUrl.startsWith('http') || !this.isSiteEnabled(pageUrl)) return null;
-        const r = this.engine.check(d.url, pageUrl, d.resourceType);
+        let r = this.engine.check(d.url, pageUrl, d.resourceType);
+        // Strict mode: known tracking companies embedded by other sites are blocked even
+        // when the filter lists miss them.
+        if (!r.block && this.prefs.get('shields.aggressive') && isKnownTracker(d.url) && isCrossSite(d.url, pageUrl)) r = { block: true, category: 'trackers' };
         if (!r.block) return null;
+        // Ads the user chose to see (everywhere, or on this site); trackers stay blocked.
+        if (r.category === 'ads' && this.adsAllowed(pageUrl)) return null;
         if (d.webContentsId !== undefined) {
           const c = this.counts.get(d.webContentsId) ?? { ads: 0, trackers: 0, other: 0 };
           c[r.category]++;
@@ -120,25 +145,7 @@ export class ShieldsService extends EventEmitter {
         return r.redirect ? { redirectURL: r.redirect, reason: 'shields-redirect' } : { cancel: true, reason: 'shields' };
       },
     });
-    // Third-party cookies (SHD-04): strip Cookie / Set-Cookie on cross-site subresources.
-    pipeline.addHeaders({
-      name: 'third-party-cookies',
-      onBeforeSendHeaders: (d, headers) => {
-        if (!this.prefs.get('shields.blockThirdPartyCookies') || d.resourceType === 'mainFrame') return;
-        const page = initiatorOf(d);
-        if (page && isCrossSite(d.url, page)) {
-          delete headers.Cookie;
-          delete headers.cookie;
-        }
-      },
-      onHeadersReceived: (d, headers) => {
-        if (!this.prefs.get('shields.blockThirdPartyCookies') || d.resourceType === 'mainFrame') return;
-        const page = initiatorOf(d);
-        if (page && isCrossSite(d.url, page)) {
-          for (const k of Object.keys(headers)) if (k.toLowerCase() === 'set-cookie') delete headers[k];
-        }
-      },
-    });
+    // Third-party cookies (SHD-04) are blocked natively (see app/main.ts), not per request.
   }
 
   /** HTTPS-First fallback: an upgraded navigation failed, so go back to HTTP and remember the host. */
@@ -157,7 +164,8 @@ export class ShieldsService extends EventEmitter {
   /** Element hiding, injected as a user stylesheet when the document is ready. */
   async applyCosmetic(wc: WebContents): Promise<void> {
     const url = wc.getURL();
-    if (!url.startsWith('http') || !this.isSiteEnabled(url)) return;
+    // Element hiding removes ad slots: none when ads are allowed here.
+    if (!url.startsWith('http') || !this.isSiteEnabled(url) || this.adsAllowed(url)) return;
     const { css } = this.engine.cosmetic(url);
     if (css) await wc.insertCSS(css, { cssOrigin: 'user' }).catch(() => undefined);
   }

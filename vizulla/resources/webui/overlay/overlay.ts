@@ -17,11 +17,33 @@ const overlay = client(OverlayInterface);
 type Surface =
   | { kind: 'command-bar'; mode: 'palette' | 'address' | 'tab-search' | 'ask'; anchor?: { x: number; y: number; width: number; height: number }; initial: string; newTab: boolean }
   | { kind: 'shields'; anchor: { x: number; y: number; width: number; height: number }; status: ShieldsStatus }
+  | { kind: 'extensions'; anchor: { x: number; y: number; width: number; height: number }; items: unknown[] }
+  | { kind: 'tools'; anchor: { x: number; y: number; width: number; height: number }; web: boolean }
+  | { kind: 'app-menu'; anchor: { x: number; y: number; width: number; height: number }; menu: AppMenu }
   | { kind: 'dialog'; id: string; dialog: Record<string, unknown> & { type: string } };
 
-interface ShieldsStatus { enabled: boolean; siteEnabled: boolean; site: string; blocked: { ads: number; trackers: number; other: number; total: number }; ruleSource: string }
+interface ShieldsStatus { enabled: boolean; siteEnabled: boolean; blockAds: boolean; adsAllowed: boolean; strict: boolean; site: string; blocked: { ads: number; trackers: number; other: number; total: number }; ruleSource: string }
 
-const SECTION_ORDER: Suggestion['section'][] = ['top', 'tabs', 'commands', 'memory', 'history', 'search', 'ai'];
+interface AppMenuItem { id: string; label: string; shortcut: string; enabled: boolean; sub: boolean }
+interface AppMenu { zoom: number; update: string | null; groups: AppMenuItem[][] }
+
+const TOOLS: { id: string; icon: string; label: string; web: boolean }[] = [
+  { id: 'tools.screenshot', icon: 'focus', label: 'tool_screenshot', web: true },
+  { id: 'tools.screenshotFull', icon: 'columns', label: 'tool_screenshot_full', web: true },
+  { id: 'tools.savePdf', icon: 'reader', label: 'tool_save_pdf', web: true },
+  { id: 'tools.print', icon: 'copy', label: 'tool_print', web: true },
+  { id: 'tools.qr', icon: 'grid', label: 'tool_qr', web: true },
+  { id: 'tools.readAloud', icon: 'volume', label: 'tool_read_aloud', web: true },
+  { id: 'tools.pip', icon: 'play', label: 'tool_pip', web: true },
+  { id: 'tools.colorPicker', icon: 'wand', label: 'tool_color_picker', web: true },
+  { id: 'view.find', icon: 'search', label: 'cmd_find', web: true },
+  { id: 'view.reader', icon: 'book', label: 'cmd_reader', web: true },
+  { id: 'tools.clearSiteData', icon: 'trash', label: 'tool_clear_site', web: true },
+  { id: 'tools.copyMarkdown', icon: 'note', label: 'tool_copy_markdown', web: true },
+  { id: 'page.taskManager', icon: 'cpu', label: 'cmd_task_manager', web: false },
+];
+
+const SECTION_ORDER: Suggestion['section'][] = ['top', 'tabs', 'browser', 'commands', 'memory', 'history', 'search', 'ai'];
 
 export class VzOverlay extends LitElement {
   static override properties = { surface: { state: true }, result: { state: true }, selected: { state: true }, input: { state: true }, closing: { state: true } };
@@ -105,6 +127,56 @@ export class VzOverlay extends LitElement {
       .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform var(--vz-dur) var(--vz-ease); }
       .switch[aria-checked='true'] { background: var(--vz-accent); }
       .switch[aria-checked='true']::after { transform: translateX(16px); }
+      .lock-hero { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 8px 4px 4px; }
+      .lock-hero h2 { margin: 6px 0 0; }
+      .lock-orb { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(160deg, #6366f1, #1e1b4b); }
+      .qr-hero { display: grid; justify-items: center; gap: 12px; text-align: center; }
+      .qr-hero h2 { margin: 0; }
+      .qr-code { width: 220px; height: 220px; padding: 10px; border-radius: 18px; background: #fff; }
+      .qr-code svg { width: 100%; height: 100%; display: block; }
+      .qr-url { font-size: var(--vz-text-s); max-width: 340px; overflow-wrap: anywhere; }
+      .tools { width: 340px; }
+      .tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+      .tool { all: unset; display: grid; justify-items: center; gap: 6px; padding: 12px 6px; border-radius: 14px; text-align: center; font-size: 11.5px; cursor: pointer; color: var(--vz-text);
+        animation: rise 180ms var(--vz-ease) both; transition: background var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .tool:hover:not([disabled]) { background: var(--vz-surface-hover); transform: translateY(-1px); }
+      .tool:focus-visible { outline: 2px solid var(--vz-focus); }
+      .tool[disabled] { opacity: .4; cursor: default; }
+      .tool .vz-icon { color: var(--vz-accent); }
+      .app-menu { width: 284px; padding: 6px; border-radius: 16px; }
+      .app-menu .mi { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 9px; font-size: var(--vz-text-m); cursor: default; }
+      .app-menu .mi:hover:not([disabled]), .app-menu .mi:focus-visible { background: var(--vz-surface-hover); outline: none; }
+      .app-menu .mi[disabled] { opacity: .45; }
+      .app-menu .mi.update { color: var(--vz-accent); font-weight: 600; }
+      .app-menu .grow { flex: 1; }
+      .app-menu .kbd { font-size: 11px; color: var(--vz-text-3); }
+      .app-menu .sep { height: 1px; background: var(--vz-border); margin: 5px 6px; }
+      .zoom-row { display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 4px 0 10px; font-size: var(--vz-text-m); }
+      .zoom-row .icon-btn { width: 28px; height: 28px; border-radius: 50%; }
+      .zoom-row .pct { all: unset; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; font-size: 12.5px; border-radius: 8px; padding: 4px 2px; cursor: default; }
+      .zoom-row .pct:hover, .zoom-row .pct:focus-visible { background: var(--vz-surface-hover); }
+      .ads { width: 330px; }
+      .ads .stat { display: grid; justify-items: center; gap: 2px; }
+      .ads .stat span { font-size: 10.5px; color: var(--vz-text-3); }
+      .ads .toggle small { display: block; font-size: var(--vz-text-xs); color: var(--vz-text-3); margin-top: 1px; }
+      .ads .strict { color: var(--vz-accent); font-weight: 600; }
+      .ads .note { font-size: var(--vz-text-s); margin: 10px 0 0; }
+      .ads .toggle + .toggle { margin-top: 12px; }
+      .ads .links { display: flex; gap: 16px; flex-wrap: wrap; }
+      .ads .links .link { display: inline-flex; align-items: center; gap: 6px; }
+      .ext-menu { width: 320px; }
+      .perm-list { margin: 0 0 6px; padding-left: 20px; font-size: var(--vz-text-m); line-height: 1.6; }
+      .ext-list { list-style: none; margin: 10px -8px 0; padding: 0; max-height: 360px; overflow: auto; }
+      .ext-list li { display: flex; align-items: center; gap: 4px; border-radius: 12px; padding: 2px 4px; }
+      .ext-list li:hover { background: var(--vz-surface-hover); }
+      .ext-open { all: unset; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 10px; cursor: pointer; font-size: var(--vz-text-m); }
+      .ext-open:disabled { cursor: default; }
+      .ext-open:focus-visible { outline: 2px solid var(--vz-focus); }
+      .ext-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ext-open img, .ext-mono { width: 20px; height: 20px; border-radius: 5px; flex: none; }
+      .ext-mono { display: grid; place-items: center; background: var(--vz-accent-soft); color: var(--vz-accent); font-weight: 700; font-size: 11px; }
+      .pin { width: 30px; height: 30px; color: var(--vz-text-3); }
+      .pin.on { color: var(--vz-accent); }
       .pop .link { margin-top: 12px; display: block; font-size: var(--vz-text-s); background: none; border: 0; color: var(--vz-accent); cursor: pointer; padding: 0; }
     `,
   ];
@@ -163,6 +235,12 @@ export class VzOverlay extends LitElement {
   private accept(sug?: Suggestion, newTab = false): void {
     const s = this.surface;
     if (s?.kind !== 'command-bar') return;
+    // "@tabs" rows narrow the search instead of opening something.
+    if (sug?.kind === 'scope') {
+      this.input = sug.id.slice('scope:'.length);
+      void this.query();
+      return;
+    }
     void overlay.accept(this.input, sug?.id, { newTab: newTab || s.newTab });
     this.surface = null;
   }
@@ -209,6 +287,9 @@ export class VzOverlay extends LitElement {
     if (!s) return nothing;
     if (s.kind === 'command-bar') return this.renderCommandBar(s);
     if (s.kind === 'shields') return this.renderShields(s);
+    if (s.kind === 'extensions') return this.renderExtensions(s);
+    if (s.kind === 'tools') return this.renderTools(s);
+    if (s.kind === 'app-menu') return this.renderAppMenu(s);
     return this.renderDialog(s);
   }
 
@@ -257,25 +338,102 @@ export class VzOverlay extends LitElement {
       </div>`;
   }
 
+  /** Tools: a grid of quick tools for the current page. */
+  private renderTools(s: Extract<Surface, { kind: 'tools' }>): TemplateResult {
+    const left = Math.max(8, Math.min(window.innerWidth - 348, s.anchor.x + s.anchor.width - 340));
+    return html`<div class="backdrop clear" @mousedown=${() => this.close()}></div>
+      <div class="pop tools" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 8}px" role="menu" aria-label=${t('cmd_tools')}>
+        <h3>${icon('wand', 18)} ${t('cmd_tools')}</h3>
+        ${s.web ? nothing : html`<p class="muted note">${t('tools_page_only')}</p>`}
+        <div class="tool-grid">${TOOLS.map((x, i) => html`<button role="menuitem" class="tool" style="animation-delay:${i * 18}ms" ?disabled=${x.web && !s.web}
+          @click=${() => (this.close(), void overlay.runCommand(x.id))}>${icon(x.icon, 18)}<span>${t(x.label as never)}</span></button>`)}</div>
+      </div>`;
+  }
+
+  /** The ⋮ menu: glass, Chrome's layout, zoom row that stays open. */
+  private renderAppMenu(s: Extract<Surface, { kind: 'app-menu' }>): TemplateResult {
+    const m = s.menu;
+    const left = Math.max(8, Math.min(window.innerWidth - 300, s.anchor.x + s.anchor.width - 292));
+    const run = async (id: string) => {
+      const next = (await overlay.appMenuAction(id)) as AppMenu | null;
+      if (next && this.surface?.kind === 'app-menu') this.surface = { ...this.surface, menu: next };
+      // The item may have opened another surface (Tools): only close the menu itself.
+      else if (!next && this.surface?.kind === 'app-menu') this.surface = null;
+    };
+    const key = (e: KeyboardEvent) => {
+      const items = [...this.renderRoot.querySelectorAll<HTMLElement>('.app-menu [role=menuitem]:not([disabled])')];
+      const i = items.indexOf((this.renderRoot as ShadowRoot).activeElement as HTMLElement);
+      const next = e.key === 'ArrowDown' ? items[(i + 1) % items.length] : e.key === 'ArrowUp' ? items[(i - 1 + items.length) % items.length] : e.key === 'Home' ? items[0] : e.key === 'End' ? items.at(-1) : null;
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+    };
+    return html`<div class="backdrop clear" @mousedown=${() => this.close()}></div>
+      <div class="pop app-menu" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 6}px" role="menu" aria-label=${t('menu_more')} @keydown=${key}>
+        ${m.update ? html`<button role="menuitem" class="mi update" @click=${() => void run('app.update')}>${icon('update', 16)}<span>${m.update}</span></button><div class="sep"></div>` : nothing}
+        ${m.groups.map((g, gi) => html`${gi === 1 ? html`<div class="zoom-row" role="group" aria-label=${t('menu_zoom')}>
+            <span>${t('menu_zoom')}</span><span class="grow"></span>
+            <button role="menuitem" class="icon-btn" aria-label=${t('cmd_zoom_out')} @click=${() => void run('view.zoomOut')}>${icon('minimize', 14)}</button>
+            <button role="menuitem" class="pct" aria-label=${t('cmd_zoom_reset')} @click=${() => void run('view.zoomReset')}>${m.zoom}%</button>
+            <button role="menuitem" class="icon-btn" aria-label=${t('cmd_zoom_in')} @click=${() => void run('view.zoomIn')}>${icon('plus', 14)}</button>
+            <button role="menuitem" class="icon-btn" aria-label=${t('cmd_fullscreen')} @click=${() => void run('view.fullscreen')}>${icon('maximize', 14)}</button>
+          </div><div class="sep"></div>` : nothing}
+          ${g.map((x) => html`<button role="menuitem" class="mi" ?disabled=${!x.enabled} aria-haspopup=${x.sub ? 'menu' : nothing} @click=${() => void run(x.id)}>
+            <span>${x.label}</span><span class="grow"></span>${x.shortcut ? html`<span class="kbd">${x.shortcut}</span>` : nothing}${x.sub ? icon('chevron-right', 14) : nothing}</button>`)}
+          ${gi < m.groups.length - 1 ? html`<div class="sep"></div>` : nothing}`)}
+      </div>`;
+  }
+
+  /** The toolbar's extensions menu (Chrome's puzzle menu): open, pin or unpin, manage. */
+  private renderExtensions(s: Extract<Surface, { kind: 'extensions' }>): TemplateResult {
+    type Item = { id: string; name: string; icon: string | null; pinned: boolean; hasAction: boolean };
+    const items = s.items as Item[];
+    const left = Math.max(8, Math.min(window.innerWidth - 328, s.anchor.x + s.anchor.width - 320));
+    const act = async (id: string, a: string) => {
+      const next = (await overlay.extensionMenu(id, a)) as Item[];
+      if (a === 'pin' || a === 'unpin') this.surface = { ...s, items: next };
+    };
+    return html`<div class="backdrop clear" @mousedown=${() => this.close()}></div>
+      <div class="pop ext-menu" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 8}px" role="dialog" aria-label=${t('ext_title')}>
+        <h3>${icon('puzzle', 18)} ${t('ext_title')}</h3>
+        ${items.length
+          ? html`<ul class="ext-list">${items.map((x) => html`<li>
+              <button class="ext-open" ?disabled=${!x.hasAction} @click=${() => void act(x.id, 'open')}>
+                ${x.icon ? html`<img src=${x.icon} alt="" />` : html`<span class="ext-mono">${x.name.slice(0, 1)}</span>`}<span>${x.name}</span></button>
+              <button class="icon-btn pin ${x.pinned ? 'on' : ''}" aria-pressed=${x.pinned} aria-label=${`${x.pinned ? t('ext_unpin') : t('ext_pin')}: ${x.name}`} title=${x.pinned ? t('ext_unpin') : t('ext_pin')}
+                @click=${() => void act(x.id, x.pinned ? 'unpin' : 'pin')}>${icon('pin', 15)}</button></li>`)}</ul>`
+          : html`<p class="muted">${t('ext_menu_empty')}</p>`}
+        <button class="link" @click=${() => void act('', 'manage')}>${icon('settings', 12)} ${t('ext_manage')}</button>
+      </div>`;
+  }
+
+  /** Ads & trackers panel (toolbar shield): live counts, protection and ads for this site. */
   private renderShields(s: Extract<Surface, { kind: 'shields' }>): TemplateResult {
     const st = s.status;
-    const left = Math.max(8, Math.min(window.innerWidth - 328, s.anchor.x - 10));
+    const left = Math.max(8, Math.min(window.innerWidth - 348, s.anchor.x - 10));
+    const update = (next: ShieldsStatus | null) => next && (this.surface = { ...s, status: next });
     return html`<div class="backdrop clear" @mousedown=${() => this.close()}></div>
-      <div class="pop" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 8}px" role="dialog" aria-label=${t('shields_title')}>
-        <h3>${icon(st.siteEnabled ? 'shield-check' : 'shield-off', 18)} ${t('shields_title')}</h3>
-        <div class="site">${st.site}</div>
+      <div class="pop ads" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 8}px" role="dialog" aria-label=${t('ads_panel_title')}>
+        <h3>${icon(st.siteEnabled ? 'shield-check' : 'shield-off', 18)} ${t('ads_panel_title')}</h3>
+        <div class="site">${st.site}${st.strict ? html` · <span class="strict">${t('ads_strict_on')}</span>` : nothing}</div>
         <div class="stats">
-          <div class="stat" title=${t('shields_ads')}>${icon('grid', 16, t('shields_ads'))}<b>${st.blocked.ads}</b></div>
-          <div class="stat" title=${t('shields_trackers')}>${icon('eye-off', 16, t('shields_trackers'))}<b>${st.blocked.trackers}</b></div>
-          <div class="stat" title=${t('shields_total')}>${icon('shield-check', 16, t('shields_total'))}<b>${st.blocked.total}</b></div>
+          <div class="stat" title=${t('shields_ads')}>${icon('grid', 16, t('shields_ads'))}<b>${st.blocked.ads}</b><span>${t('shields_ads')}</span></div>
+          <div class="stat" title=${t('shields_trackers')}>${icon('eye-off', 16, t('shields_trackers'))}<b>${st.blocked.trackers}</b><span>${t('shields_trackers')}</span></div>
+          <div class="stat" title=${t('shields_total')}>${icon('shield-check', 16, t('shields_total'))}<b>${st.blocked.total}</b><span>${t('shields_total')}</span></div>
         </div>
-        <div class="toggle"><span>${st.siteEnabled ? t('shields_on_for_site') : t('shields_off_for_site')}</span>
-          <button class="switch" role="switch" aria-checked=${st.siteEnabled} aria-label=${t('shields_toggle_site')} ?disabled=${!st.enabled}
-            @click=${async () => {
-              const next = (await overlay.setShieldsForSite(!st.siteEnabled)) as ShieldsStatus | null;
-              if (next) this.surface = { ...s, status: next };
-            }}></button></div>
-        <button class="link" title=${t('shields_breakage_hint')} @click=${() => (this.close(), void overlay.runCommand('page.privacy'))}>${icon('external', 12)} ${t('shields_open_dashboard')}</button>
+        <div class="toggle"><span>${t('ads_protection_site')}</span>
+          <button class="switch" role="switch" aria-checked=${st.siteEnabled} aria-label=${t('ads_protection_site')} ?disabled=${!st.enabled}
+            @click=${async () => update((await overlay.setShieldsForSite(!st.siteEnabled)) as ShieldsStatus | null)}></button></div>
+        ${st.blockAds
+          ? html`<div class="toggle"><span>${t('ads_show_site')}<small>${t('ads_show_site_desc')}</small></span>
+              <button class="switch" role="switch" aria-checked=${st.adsAllowed} aria-label=${t('ads_show_site')} ?disabled=${!st.siteEnabled}
+                @click=${async () => update((await overlay.setAdsForSite(!st.adsAllowed)) as ShieldsStatus | null)}></button></div>`
+          : html`<p class="muted note">${t('ads_allowed_everywhere')}</p>`}
+        <div class="links">
+          <button class="link" @click=${() => (this.close(), void overlay.runCommand('page.settingsShields'))}>${icon('settings', 12)} ${t('ads_settings')}</button>
+          <button class="link" title=${t('shields_breakage_hint')} @click=${() => (this.close(), void overlay.runCommand('page.privacy'))}>${icon('external', 12)} ${t('shields_open_dashboard')}</button>
+        </div>
       </div>`;
   }
 
@@ -300,7 +458,7 @@ export class VzOverlay extends LitElement {
 }
 
 function kindIcon(k: Suggestion['kind']): string {
-  return ({ url: 'globe', search: 'search', tab: 'layers', history: 'history', bookmark: 'star', command: 'command', ask: 'sparkle', memory: 'brain', archive: 'archive', 'nl-command': 'wand' } as Record<string, string>)[k] ?? 'globe';
+  return ({ url: 'globe', search: 'search', tab: 'layers', history: 'history', bookmark: 'star', command: 'command', ask: 'sparkle', memory: 'brain', archive: 'archive', 'nl-command': 'wand', destination: 'settings', scope: 'search' } as Record<string, string>)[k] ?? 'globe';
 }
 
 customElements.define('vz-overlay', VzOverlay);

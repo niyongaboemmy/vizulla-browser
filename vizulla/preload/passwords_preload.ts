@@ -89,5 +89,15 @@ if (/^https?:$/.test(location.protocol) && window.top === window) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', report, { once: true });
   else report();
   window.addEventListener('load', schedule, { once: true });
-  new MutationObserver(schedule).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['type', 'style', 'class', 'hidden'] });
+  // Only inserted elements matter (forms that appear later). Watching attributes too made
+  // heavy web apps, which restyle constantly, call this on nearly every frame.
+  new MutationObserver((records) => {
+    for (const r of records) {
+      for (const n of r.addedNodes) {
+        if (n.nodeType === 1 && ((n as Element).tagName === 'INPUT' || (n as Element).firstElementChild)) return schedule();
+      }
+    }
+  }).observe(document, { subtree: true, childList: true });
+  // A password field that was there but hidden, or switched from type=text, shows up on focus.
+  document.addEventListener('focusin', (e) => (e.target as HTMLInputElement | null)?.type === 'password' && schedule(), true);
 }

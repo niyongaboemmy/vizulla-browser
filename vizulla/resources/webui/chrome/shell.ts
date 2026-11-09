@@ -49,10 +49,10 @@ export class VzShell extends LitElement {
       :host([layout='horizontal']) vz-toolbar { grid-row: 2; }
       :host([layout='horizontal']) .bookmarks { grid-row: 3; }
       :host([layout='horizontal']) .main, :host([layout='horizontal']) .panel-host { grid-row: 4; }
-      .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; background: var(--vz-toolbar); }
+      .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; background: var(--vz-toolbar-bg, var(--vz-toolbar)); }
       /* The page gets every pixel: no inset, no rounded frame. */
       .frame-wrap { flex: 1; display: flex; gap: 2px; min-height: 0; background: var(--vz-border); }
-      .frame { flex: 1; min-width: 0; background: var(--vz-toolbar); position: relative; }
+      .frame { flex: 1; min-width: 0; background: transparent; position: relative; }
       .frame.split-active { box-shadow: inset 0 2px 0 var(--vz-accent); }
       :host([layout='vertical']) .main { box-shadow: -1px 0 0 var(--vz-border); }
       .strip {
@@ -109,7 +109,7 @@ export class VzShell extends LitElement {
     }
     applyTheme(s.theme, s.accent, s.density);
     // macOS: the frame and toolbar are translucent so the window's vibrancy shows through (glass).
-    if (s.platform.startsWith('darwin') && s.theme !== 'high-contrast') {
+    if (s.glass) {
       const root = document.documentElement.style;
       root.setProperty('--vz-frame-bg', 'color-mix(in srgb, var(--vz-frame) 45%, transparent)');
       root.setProperty('--vz-toolbar-bg', 'color-mix(in srgb, var(--vz-toolbar) 70%, transparent)');

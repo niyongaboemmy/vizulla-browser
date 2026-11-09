@@ -10,8 +10,20 @@ import type { UpdateInfo, WindowState } from '@vz/common/types';
 import { shell } from './shell';
 import { securityIcon } from './common';
 
+interface ExtAction { id: string; title?: string; text?: string; color?: string; iconModified?: number; tabs?: Record<string, { title?: string; text?: string; color?: string; iconModified?: number }> }
+interface ExtBridge {
+  getState(): Promise<{ activeTabId?: number; actions: ExtAction[] }>;
+  activate(details: unknown): Promise<void>;
+  observe(fn: () => void): () => void;
+}
+const vzExt = (globalThis as unknown as { vzExt?: ExtBridge }).vzExt;
+
 export class VzToolbar extends LitElement {
-  static override properties = { state: { attribute: false }, mode: { type: String }, rail: { type: Boolean } };
+  static override properties = { state: { attribute: false }, mode: { type: String }, rail: { type: Boolean }, actions: { state: true } };
+  /** Extension toolbar buttons (electron-chrome-extensions browserAction state). */
+  actions = new Map<string, ExtAction>();
+  private stopExt: (() => void) | null = null;
+  private lastExtCount = -1;
   state!: WindowState;
   mode: 'full' | 'compact' = 'full';
   /** The collapsed tab rail sits to the left (it holds the sidebar button and clears the traffic lights). */
@@ -63,6 +75,9 @@ export class VzToolbar extends LitElement {
         -webkit-mask: radial-gradient(circle, transparent 4.5px, #000 5px); transition: --p 200ms; }
       @keyframes breathe { 50% { transform: scale(1.05); } }
       /* Responsive: secondary controls fold into the ⋮ menu as the window narrows. */
+      .ext { position: relative; }
+      .ext img { width: 18px; height: 18px; border-radius: 4px; }
+      .ext .badge { position: absolute; right: 1px; bottom: 3px; min-width: 15px; height: 14px; padding: 0 3px; border-radius: 7px; font-size: 9.5px; font-weight: 700; line-height: 14px; color: #fff; text-align: center; pointer-events: none; box-shadow: 0 0 0 1.5px var(--vz-toolbar); }
       .me-av { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 11.5px; font-weight: 700; transition: transform var(--vz-dur) var(--vz-ease); }
       .me:hover .me-av { transform: scale(1.08); }
       .tabs-btn { display: none; }
@@ -120,6 +135,11 @@ export class VzToolbar extends LitElement {
             <button class="chip-btn wide" aria-label=${t('cmd_bookmark')} title=${t('cmd_bookmark')} @click=${() => shell.runCommand('nav.bookmark')}>${icon('star', 14)}</button>`
           : nothing}
       </div>
+      <button class="icon-btn wide" aria-label=${t('cmd_tools')} title=${t('cmd_tools')} aria-haspopup="menu" @click=${(e: MouseEvent) => {
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        void shell.openToolsMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+      }}>${icon('wand', 17)}</button>
+      ${this.renderExtensions()}
       ${toast ? html`<div class="toast" role="status" aria-live="polite"><span>${toast.text}</span>
           ${toast.action ? html`<button @click=${() => shell.toastAction(toast.id)}>${toast.action.label}</button>` : nothing}
           <button aria-label=${t('action_close')} style="color:var(--vz-text-2)" @click=${() => shell.dismissToast(toast.id)}>${icon('x', 12)}</button></div>` : nothing}
@@ -136,9 +156,63 @@ export class VzToolbar extends LitElement {
               const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
               void shell.showProfileMenu({ x: Math.round(r.left), y: Math.round(r.bottom + 4) });
             }}><span class="me-av" style="--c:${PROFILE_HEX[s.profile.color] ?? PROFILE_HEX.blue}">${(s.profile.name[0] ?? '?').toUpperCase()}</span></button>`}
-      <button class="icon-btn" aria-label=${t('menu_more')} title=${t('menu_more')} @click=${(e: MouseEvent) => shell.showAppMenu({ x: e.clientX, y: e.clientY })}>${icon('more-v', 18)}</button>
+      <button class="icon-btn" aria-label=${t('menu_more')} title=${t('menu_more')} aria-haspopup="menu" @click=${(e: MouseEvent) => {
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        void shell.openAppMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+      }}>${icon('more-v', 18)}</button>
       ${compact && !mac ? html`<span class="end" style="--controls:138px"></span>` : nothing}
     `;
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.stopExt?.();
+    this.stopExt = null;
+  }
+
+  protected override willUpdate(): void {
+    // Start listening once extensions exist; refresh when the set changes.
+    const count = this.state?.extensions?.count ?? 0;
+    if (!vzExt || count === this.lastExtCount) return;
+    this.lastExtCount = count;
+    if (count && !this.stopExt) this.stopExt = vzExt.observe(() => void this.refreshExtensions());
+    void this.refreshExtensions();
+  }
+
+  private async refreshExtensions(): Promise<void> {
+    if (!vzExt) return;
+    try {
+      const st = await vzExt.getState();
+      this.actions = new Map(st.actions.map((a) => [a.id, a]));
+    } catch {
+      /* extensions still starting */
+    }
+  }
+
+  /** Pinned extension buttons (badge, title and icon per tab), then the extensions menu. */
+  private renderExtensions() {
+    const ext = this.state.extensions;
+    if (!ext?.count) return nothing;
+    const tab = ext.activeWcId ?? -1;
+    return html`${ext.pinned.map((id) => {
+        const a = this.actions.get(id);
+        if (!a) return nothing;
+        const info = { ...a, ...(a.tabs?.[String(tab)] ?? {}) };
+        const q = new URLSearchParams({ tabId: String(tab), partition: 'vizulla-extensions', ...(info.iconModified ? { t: String(info.iconModified) } : {}) });
+        const title = info.title || id;
+        const fire = (e: MouseEvent, eventType: 'click' | 'contextmenu') => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          void vzExt?.activate({ eventType, extensionId: id, tabId: tab, alignment: 'bottom left', anchorRect: { x: r.left, y: r.top, width: r.width, height: r.height } });
+        };
+        return html`<button class="icon-btn ext wide" title=${title} aria-label=${title} data-ext=${id}
+          @click=${(e: MouseEvent) => fire(e, 'click')} @contextmenu=${(e: MouseEvent) => (e.preventDefault(), fire(e, 'contextmenu'))}>
+          <img src=${`crx://extension-icon/${id}/32/2?${q.toString()}`} alt="" />
+          ${info.text ? html`<span class="badge" style="background:${info.color || 'var(--vz-accent)'}">${info.text}</span>` : nothing}</button>`;
+      })}
+      <button class="icon-btn" aria-label=${t('ext_puzzle')} title=${t('ext_puzzle')} @click=${(e: MouseEvent) => {
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        void shell.openExtensionsMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+      }}>${icon('puzzle', 17)}</button>`;
   }
 
   private renderUpdate(u: UpdateInfo) {

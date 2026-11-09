@@ -31,6 +31,17 @@ Verification: 862 unit tests (vitest), Go tests for the Gateway and sync server,
 | 4 R2 | `ai_runtime` and `memory_index` utility processes, model manager (signed manifests, hash checks), device profile, Memory (opt-in, encrypted, hybrid recall, deletion follows history), Notes, NL commands + Ask Settings, intent chips, AI tab grouping, E2EE sync (Go server), fingerprinting protection, cookie-banner reject, rw/sw drafts | `phase4_r2.e2e.ts` |
 | 5–6 R3 | Plan validator, deterministic Policy Enforcer (322-case model-free attack suite, 100% green), isolated agent session + egress filter, CDP actuator, heuristic + LLM planners, advisory injection detector, control bar, Esc kill switch, login-page stop, Action Log, build-staleness gating, Stage B confirmations (exact destination/fields, delayed arming), PII handles, egress content matching, session grants | `policy_enforcer.test.ts`, `phase5_6_agent.e2e.ts` |
 
+## 2b. Since 0.3.5 (0.4.0, see PLAN_0.4.md)
+
+| Area | Shipped |
+|------|---------|
+| Extensions | Chrome Web Store install, vizulla://extensions (on/off, details, remove, developer mode), toolbar buttons with badges and popups, puzzle menu with pinning, context-menu items, onInstalled, no extensions in private windows |
+| Speed | No per-request header hooks (third-party cookies blocked natively), web hook limited to network schemes, one page-config call per frame, lighter password detector, omnibox preconnect, Task Manager (Shift+Esc) |
+| Privacy | Ads blocked by default with an Ads & trackers panel (allow per site or everywhere, trackers stay blocked), strict mode that blocks known trackers beyond the lists, private windows: own start page, dark, capture protection, strict fingerprinting, Touch ID lock, close all, no leaks to the privacy log |
+| Search | ~75 Vizulla destinations with keywords in EN/FR/SW/RW, Settings deep links, @tabs/@history/@bookmarks/@settings/@tools, search-engine suggestions through a cookie-free session (never in private) |
+| Tools & glass | Tools menu (screenshot, full-page screenshot, PDF, print, QR, read aloud, PiP, colour picker, clear site data, Copy as Markdown, Task Manager), glass ⋮ menu, Mica on Windows 11, frosted internal pages and panels |
+| Developers | F12 / inspect element / view source, JSON viewer, local MCP server for AI coding tools (token, origin/host checks, per-tool approval, list_tabs, open_url, read_page, screenshot, console_logs) |
+
 ## 2a. Since 0.2.1
 
 | Area | Delivered | Notes |
@@ -50,7 +61,7 @@ Verification: 862 unit tests (vitest), Go tests for the Gateway and sync server,
 | Item | Why / what remains |
 |---|---|
 | Chromium fork work: patches, rebases, RBE, perf bots on RD devices, 72 h security drill | Requires the fork (G1 decision) and infrastructure |
-| Extension compatibility (EXT-01) | Electron supports only a subset of Chrome extension APIs. Fails the ≥ 95% target; needs the fork. |
+| Extension compatibility (EXT-01) | Since 0.4: Chrome Web Store installs and the common `chrome.*` APIs via electron-chrome-extensions / electron-chrome-web-store (verified with Dark Reader). Still missing: `chrome.commands`, some `tabs` methods. The ≥ 95% target is not measured yet. |
 | Updater, signing, notarization | `electron-builder` config only; no certificates, no update server |
 | Safe Browsing replacement (ID-04), CRLSet/component updater, Widevine | Need vendor contracts / licenses |
 | On-device generative model | The runtime ships extractive, embedding, and intent engines; the model manager is ready, but no llama.cpp/MLX engine is integrated (D-6) |
