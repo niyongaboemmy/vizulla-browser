@@ -26,9 +26,10 @@ export class VzTabstrip extends LitElement {
     base,
     css`
       :host { display: flex; align-items: flex-end; height: 40px; padding: 0 6px; background: var(--vz-frame-bg, var(--vz-frame)); -webkit-app-region: drag; }
-      .lead, .trail { display: flex; align-items: center; gap: 2px; height: 100%; -webkit-app-region: no-drag; flex: none; }
+      /* Every control shares the tabs' centre line: 23px down a 40px strip (34px tabs on the bottom edge). */
+      .lead, .trail { display: flex; align-items: flex-end; gap: 2px; height: 100%; padding-bottom: 3px; -webkit-app-region: no-drag; flex: none; }
       .lead { padding-left: var(--traffic, 0); padding-right: 6px; }
-      .dot { width: 24px; height: 24px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .dot { width: 24px; height: 24px; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .dot:hover { background: var(--vz-tab-hover); color: var(--c); }
       .dot.on { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
       .dot:active { transform: scale(0.92); }
@@ -75,7 +76,7 @@ export class VzTabstrip extends LitElement {
         background: var(--g); color: #fff; font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .group.collapsed { opacity: .75; }
       .tab.in-group .body { box-shadow: inset 0 -2px 0 var(--g); border-radius: 8px 8px 2px 2px; }
-      .add, .search { -webkit-app-region: no-drag; width: 28px; height: 28px; margin-bottom: 3px; border-radius: 50%; }
+      .add, .search { -webkit-app-region: no-drag; width: 28px; height: 28px; border-radius: 50%; }
       .search { margin-left: 4px; }
       .end { width: var(--controls, 0); flex: none; }
       @container (max-width: 96px) {

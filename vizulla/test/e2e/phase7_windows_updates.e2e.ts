@@ -250,3 +250,25 @@ test('"+" opens a New Tab page right away, like Chrome', async () => {
   expect(tabs.every((u: string) => u.startsWith('vizulla://newtab'))).toBe(true);
   await expect(chrome.locator('vz-tabstrip').getByRole('tab')).toHaveCount(3);
 });
+
+test('tab strip: icons, close button, "+" and tab search share one centre line', async () => {
+  h = await launch();
+  const chrome = await h.chrome();
+  await inMain(h, (vz) => {
+    vz.focused().win.setBounds({ width: 1200, height: 700 });
+    vz.focused().loadUrl(null, 'vizulla://settings/', { newTab: true });
+  });
+  await expect(chrome.locator('vz-tabstrip').getByRole('tab')).toHaveCount(2);
+  await expect(chrome.locator('vz-tabstrip').getByRole('button', { name: 'Search tabs' })).toBeVisible();
+  // A new tab grows in; below 96px it shows no icon, so wait for full width.
+  await chrome.waitForFunction(() => {
+    const tab = document.querySelector('vz-shell')!.shadowRoot!.querySelector('vz-tabstrip')!.shadowRoot!.querySelector('.tab.active');
+    return (tab?.getBoundingClientRect().width ?? 0) > 120;
+  });
+  const centres = await chrome.evaluate(() => {
+    const ts = document.querySelector('vz-shell')!.shadowRoot!.querySelector('vz-tabstrip')!.shadowRoot!;
+    const c = (sel: string) => { const r = ts.querySelector(sel)!.getBoundingClientRect(); return r.top + r.height / 2; };
+    return [c('.tab.active .fav'), c('.tab.active .x'), c('.tab:not(.active) .fav'), c('.add'), c('.search'), c('.dot')];
+  });
+  for (const y of centres) expect(Math.abs(y - centres[0]!)).toBeLessThanOrEqual(0.5);
+});
