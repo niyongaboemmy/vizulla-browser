@@ -61,6 +61,8 @@ export interface Prefs {
   'sync.types': string[];
   'downloads.askWhere': boolean;
   'flags.user': Record<string, boolean>;
+  /** Schema version of the stored prefs (prefs_service.ts migrations). Not user-writable. */
+  'prefs.version': number;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -126,6 +128,7 @@ export const DEFAULT_PREFS: Prefs = {
   'sync.types': ['spaces', 'bookmarks', 'history', 'settings', 'tabs'],
   'downloads.askWhere': false,
   'flags.user': {},
+  'prefs.version': 1,
 };
 
 export type PrefKey = keyof Prefs;

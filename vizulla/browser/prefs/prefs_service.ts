@@ -14,6 +14,13 @@ export class PrefsService extends EventEmitter {
     for (const k of Object.keys(stored) as PrefKey[]) {
       if (k in DEFAULT_PREFS) (this.values as unknown as Record<string, unknown>)[k] = stored[k];
     }
+    // A new profile starts at the current version; files from before versioning are 0.
+    const from = typeof stored['prefs.version'] === 'number' ? stored['prefs.version'] : Object.keys(stored).length ? 0 : DEFAULT_PREFS['prefs.version'];
+    if (from < DEFAULT_PREFS['prefs.version']) {
+      migrate(this.values, from);
+      this.values['prefs.version'] = DEFAULT_PREFS['prefs.version'];
+      this.scheduleWrite();
+    }
   }
 
   get<K extends PrefKey>(key: K): Prefs[K] {
@@ -47,5 +54,15 @@ export class PrefsService extends EventEmitter {
     if (!this.path || this.timer) return;
     this.timer = setTimeout(() => this.flush(), 300);
     this.timer.unref?.();
+  }
+}
+
+/** One step per version; each runs once, in order, on prefs saved by an older build. */
+export function migrate(values: Prefs, from: number): void {
+  // v1 (0.3.3): tabs go back on top, like Chrome. Side tabs hid the tab list (and "+")
+  // once the sidebar was collapsed; they stay one click away in Settings.
+  if (from < 1) {
+    values['tabs.layout'] = 'horizontal';
+    values['tabs.sidebarCollapsed'] = false;
   }
 }

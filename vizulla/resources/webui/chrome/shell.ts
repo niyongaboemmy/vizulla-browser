@@ -212,9 +212,10 @@ export class VzShell extends LitElement {
     const narrow = this.vw < NARROW;
     const tiny = this.vw < TINY;
     // Small windows: the sidebar narrows, then hides (tabs stay one click away in tab search).
-    const showSidebar = vertical && !s.sidebarCollapsed && !s.fullscreen && !tiny;
+    // Full screen keeps the tabs, as in Chrome (a page in full screen covers the window anyway).
+    const showSidebar = vertical && !s.sidebarCollapsed && !tiny;
     // Collapsed, the sidebar becomes a slim rail of tab icons (as in Chrome), never nothing.
-    const showRail = vertical && s.sidebarCollapsed && !s.fullscreen && !tiny;
+    const showRail = vertical && s.sidebarCollapsed && !tiny;
     const sidebarWidth = narrow ? Math.min(s.sidebarWidth, 200) : s.sidebarWidth;
     const panel = s.panel && !s.classic;
     // A side panel never takes more than half the window from the page.
