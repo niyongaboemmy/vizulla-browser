@@ -96,7 +96,7 @@ export class VzToolbar extends LitElement {
       .me.ringed .me-av { box-shadow: 0 0 0 2px var(--fr-bg, var(--vz-toolbar)), 0 0 0 3.5px var(--c); }
       .tabs-btn { display: none; }
       /* Narrower toolbar, fewer buttons (each one stays reachable from the ⋮ or account menu):
-         wide: reader, notes, agent, downloads, pinned extensions · mid: forward, tools, bookmark · low: AI, Gemini. */
+         wide: reader, notes, agent, downloads · mid: forward, tools, bookmark, pinned extensions · low: AI, Gemini. */
       @container toolbar (max-width: 920px) { .wide { display: none; } }
       @container toolbar (max-width: 700px) { .mid { display: none; } .omni { margin: 0 4px; } .toast { max-width: 160px; } .toast span { display: none; } }
       @container toolbar (max-width: 540px) { .low { display: none; } .icon-btn { width: 32px; height: 32px; } :host { padding: 0 6px; } }
@@ -222,7 +222,7 @@ export class VzToolbar extends LitElement {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           void vzExt?.activate({ eventType, extensionId: id, tabId: tab, alignment: 'bottom left', anchorRect: { x: r.left, y: r.top, width: r.width, height: r.height } });
         };
-        return html`<button class="icon-btn ext wide" title=${title} aria-label=${title} data-ext=${id}
+        return html`<button class="icon-btn ext mid" title=${title} aria-label=${title} data-ext=${id}
           @click=${(e: MouseEvent) => fire(e, 'click')} @contextmenu=${(e: MouseEvent) => (e.preventDefault(), fire(e, 'contextmenu'))}>
           <img src=${`crx://extension-icon/${id}/32/2?${q.toString()}`} alt="" />
           ${info.text ? html`<span class="badge" style="background:${info.color || 'var(--vz-accent)'}">${info.text}</span>` : nothing}</button>`;
