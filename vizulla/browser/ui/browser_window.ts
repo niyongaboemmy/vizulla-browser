@@ -15,6 +15,7 @@ import type { NavState, SessionWindow } from '../spaces/spaces_service';
 import { OverlayController } from './overlay';
 import { TipView } from './tip_view';
 import { PopupWindow } from './popup_window';
+import { holdsMedia } from '../tabs/tab_lifecycle';
 import { emitTo } from './ipc_router';
 import { buildPageContextMenu } from './context_menu';
 import { classifyInput, displayUrl, searchUrl, siteOf } from '@vz/common/url';
@@ -411,9 +412,11 @@ export class BrowserWindowController extends EventEmitter {
     this.focusActive();
   }
 
-  discardTab(id: number): boolean {
+  /** Puts a background tab to sleep. Automatic sleep spares tabs with media; "Sleep tab" (`byUser`) doesn't. */
+  discardTab(id: number, byUser = false): boolean {
     const tab = this.tabs.get(id);
-    if (!tab || tab.discarded || id === this.model.activeTabId || id === this.splitTabId || tab.audible || tab.agent) return false;
+    if (!tab || tab.discarded || id === this.model.activeTabId || id === this.splitTabId || tab.agent) return false;
+    if (!byUser && holdsMedia(tab, Date.now())) return false;
     this.detachView(tab.view);
     tab.discard();
     return true;
@@ -489,7 +492,7 @@ export class BrowserWindowController extends EventEmitter {
     const archived: { id: number; spaceId: string }[] = [];
     for (const m of [...this.model.all()]) {
       const tab = this.tabs.get(m.id);
-      if (!tab || m.pinned || tab.agent || tab.audible) continue;
+      if (!tab || m.pinned || tab.agent || holdsMedia(tab, now)) continue;
       if (this.model.activeForSpace(m.spaceId) === m.id) continue;
       if (now - m.lastActive < threshold) continue;
       if (tab.url.startsWith('vizulla://newtab')) {

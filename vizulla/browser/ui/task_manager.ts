@@ -71,7 +71,7 @@ export function endProcess(a: BrowserApp, pid: number): void {
   for (const w of a.windows) {
     for (const tab of w.tabs.values()) {
       if (tab.wc && !tab.wc.isDestroyed() && tab.wc.getOSProcessId() === pid) {
-        if (!w.discardTab(tab.id)) tab.wc.forcefullyCrashRenderer();
+        if (!w.discardTab(tab.id, true)) tab.wc.forcefullyCrashRenderer();
         w.pushState();
       }
     }

@@ -68,6 +68,10 @@ export class WebTab extends EventEmitter {
   private sampledColor: string | null = null;
   loading = false;
   audible = false;
+  /** A video or audio element is playing (even muted, or in picture-in-picture). */
+  mediaPlaying = false;
+  /** When media last played: the tab keeps its page a while after (tabs/tab_lifecycle.ts). */
+  mediaAt = 0;
   muted = false;
   certError = false;
   isPdf = false;
@@ -292,7 +296,20 @@ export class WebTab extends EventEmitter {
     });
     wc.on('audio-state-changed', (e) => {
       this.audible = e.audible;
+      if (e.audible) this.mediaAt = Date.now();
       upd();
+    });
+    wc.on('media-started-playing', () => {
+      this.mediaPlaying = true;
+      this.mediaAt = Date.now();
+    });
+    wc.on('media-paused', () => {
+      this.mediaPlaying = false;
+      this.mediaAt = Date.now();
+    });
+    // A new page has no media yet.
+    wc.on('did-start-navigation', (_e, _url, inPlace, isMainFrame) => {
+      if (isMainFrame && !inPlace) this.mediaPlaying = false;
     });
     wc.on('dom-ready', () => this.emit('dom-ready'));
     wc.on('did-finish-load', () => this.emit('did-finish-load'));

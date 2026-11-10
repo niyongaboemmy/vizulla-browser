@@ -80,6 +80,11 @@ const PAGES: Record<string, string> = {
     document.getElementById('allow').onclick = () => { window.opener.postMessage('token-123', '*'); window.close(); };</script>`,
   // A transparent favicon (a ring with a clear middle): nothing may show through it.
   '/fav': '<!doctype html><title>Ring icon</title><link rel="icon" href="/ring.png"><h1>Ring</h1>',
+  // A muted film: a video fed by an animated canvas (no media file needed).
+  '/film': `<!doctype html><title>Film</title><canvas id="c" width="160" height="90"></canvas><video id="v" muted playsinline width="320"></video><script>
+    const c = document.getElementById('c'), g = c.getContext('2d'); let f = 0;
+    setInterval(() => { g.fillStyle = 'hsl(' + (f++ % 360) + ' 70% 50%)'; g.fillRect(0, 0, 160, 90); }, 40);
+    const v = document.getElementById('v'); v.srcObject = c.captureStream(25);</script>`,
   '/gemini': `<!doctype html><title>Gemini</title><div contenteditable="true" role="textbox" aria-label="Enter a prompt here" style="min-height:40px;border:1px solid #ccc"></div>`,
   '/pwa': `<!doctype html><title>Vizulla Test App</title><link rel="manifest" href="/manifest.webmanifest"><h1>Test app</h1><script>
     window.__bip = null; addEventListener('beforeinstallprompt', (e) => { window.__bip = e; }); addEventListener('appinstalled', () => { window.__installed = true; });</script>`,

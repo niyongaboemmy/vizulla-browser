@@ -190,11 +190,30 @@ if (/^https?:$/.test(location.protocol)) {
     })()`).catch(() => undefined);
   }
   // Element hiding: report the classes, ids and links in use (as the page changes) and
-  // apply the matching hiding rules as user styles, which beat the page's own.
+  // apply the matching hiding rules as user styles, which beat the page's own. New names are
+  // gathered and looked up at most once a second: players and live pages (subtitles, chat,
+  // progress) mint new ids many times a second, which made a lookup each time for hours.
   if (cfg.cosmetic) {
+    const pending = { classes: new Set<string>(), ids: new Set<string>(), hrefs: new Set<string>() };
+    let timer = 0;
+    let last = 0;
+    const flush = () => {
+      timer = 0;
+      last = Date.now();
+      const f = { classes: [...pending.classes], ids: [...pending.ids], hrefs: [...pending.hrefs] };
+      pending.classes.clear();
+      pending.ids.clear();
+      pending.hrefs.clear();
+      if (!f.classes.length && !f.ids.length && !f.hrefs.length) return;
+      void ipcRenderer.invoke('vz:cosmetic', f).then((css: string) => css && webFrame.insertCSS(css, { cssOrigin: 'user' })).catch(() => undefined);
+    };
     const monitor = new DOMMonitor((u) => {
-      if (u.type !== 'features' || (!u.classes.length && !u.ids.length && !u.hrefs.length)) return;
-      void ipcRenderer.invoke('vz:cosmetic', { classes: u.classes, ids: u.ids, hrefs: u.hrefs }).then((css: string) => css && webFrame.insertCSS(css, { cssOrigin: 'user' })).catch(() => undefined);
+      if (u.type !== 'features') return;
+      for (const c of u.classes) pending.classes.add(c);
+      for (const i of u.ids) pending.ids.add(i);
+      for (const h of u.hrefs) pending.hrefs.add(h);
+      // The first lookup goes at once (the page's initial ads), later ones gather for a second.
+      if (!timer) timer = window.setTimeout(flush, Math.max(0, 1000 - (Date.now() - last)));
     });
     const start = () => {
       monitor.queryAll(window);

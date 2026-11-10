@@ -31,6 +31,7 @@ import { ToolsService } from './tools/tools_service';
 import { installDevTools } from './tools/dev_tools';
 import { McpServer } from './mcp/mcp_server';
 import { permissionsUi } from './permissions/permissions_ui';
+import { memoryLow } from './tabs/tab_lifecycle';
 
 export type CommandHandler = (w: BrowserWindowController, args?: Record<string, unknown>) => unknown;
 export type PageMethod = (payload: unknown, ctx: CallContext & { window: BrowserWindowController | null }) => unknown;
@@ -962,7 +963,7 @@ export class BrowserApp {
       },
       ...(m.groupId ? [{ label: t('ctx_remove_from_group'), click: () => w.model.move(id, w.model.visible(m.spaceId).findIndex((x) => x.id === id), null) }] : []),
       { label: t('ctx_copy_link'), click: () => require('electron').clipboard.writeText(tab.url) },
-      { label: t('ctx_sleep_tab'), enabled: !tab.discarded && id !== w.model.activeTabId, click: () => w.discardTab(id) },
+      { label: t('ctx_sleep_tab'), enabled: !tab.discarded && id !== w.model.activeTabId, click: () => w.discardTab(id, true) },
       { type: 'separator' },
       { label: t('cmd_tab_close'), click: () => w.closeTab(id) },
       { label: t('cmd_tab_close_others'), click: () => w.model.visible(m.spaceId).filter((x) => x.id !== id && !x.pinned).forEach((x) => w.closeTab(x.id)) },
@@ -1136,8 +1137,7 @@ export class BrowserApp {
         const base = this.profile.prefs.get('tabs.memorySaverMinutes');
         if (!base) return;
         // Adaptive: sooner on battery, much sooner when the computer is short of memory.
-        const mem = process.getSystemMemoryInfo();
-        const low = mem.total > 0 && mem.free / mem.total < 0.05;
+        const low = memoryLow(process.getSystemMemoryInfo());
         const mins = low ? Math.min(base, 5) : powerMonitor.isOnBatteryPower() ? Math.min(base, 15) : base;
         const exempt = new Set(this.profile.prefs.get('tabs.discardExemptSites'));
         const now = Date.now();
