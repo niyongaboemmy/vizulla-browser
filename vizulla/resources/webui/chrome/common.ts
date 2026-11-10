@@ -31,11 +31,19 @@ export function securityIcon(s: SecurityState): string {
   }
 }
 
-/** A favicon that falls back to a colored monogram when the image fails to load. */
+/**
+ * A site's favicon exactly as the site draws it: no rounding, no colour behind it. The coloured
+ * letter appears only if the image fails to load (it used to sit underneath and show through
+ * transparent icons).
+ */
 export function faviconImg(src: string, url: string, size = 16): TemplateResult {
-  return html`<span style="position:relative;display:inline-grid;place-items:center;width:${size}px;height:${size}px">${monogram(url, size)}<img
-    src=${src} width=${size} height=${size} alt="" referrerpolicy="no-referrer" style="position:absolute;inset:0;border-radius:3px"
-    @error=${(e: Event) => (e.target as HTMLImageElement).remove()} /></span>`;
+  return html`<span style="position:relative;display:inline-grid;place-items:center;width:${size}px;height:${size}px"><span class="fav-fallback" style="display:none">${monogram(url, size)}</span><img
+    src=${src} width=${size} height=${size} alt="" referrerpolicy="no-referrer" style="display:block;width:${size}px;height:${size}px;object-fit:contain;border-radius:0"
+    @error=${(e: Event) => {
+      const img = e.target as HTMLImageElement;
+      (img.previousElementSibling as HTMLElement | null)?.style.removeProperty('display');
+      img.remove();
+    }} /></span>`;
 }
 
 const HUES = [228, 172, 32, 346, 262, 152, 199, 215];

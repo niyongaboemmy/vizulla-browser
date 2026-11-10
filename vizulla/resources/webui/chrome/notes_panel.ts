@@ -35,7 +35,7 @@ class VzNotes extends LitElement {
     .preview p { margin: 0 0 8px; }
     .src { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: var(--vz-text-xs); color: var(--vz-text-2); }
     .src button { border: 0; background: none; color: var(--vz-accent); cursor: pointer; padding: 0; font-size: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90%; }
-    .empty { text-align: center; color: var(--vz-text-2); padding: 32px 16px; font-size: var(--vz-text-s); }`];
+    .empty { display: grid; justify-items: center; gap: 4px; text-align: center; color: var(--vz-text-2); padding: 32px 16px; font-size: var(--vz-text-s); }`];
 
   override connectedCallback(): void {
     super.connectedCallback();

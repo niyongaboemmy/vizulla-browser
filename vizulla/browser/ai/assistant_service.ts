@@ -5,6 +5,7 @@
 //  - Context is the current tab only (PA-10), tagged UNTRUSTED_WEB.
 //  - Conversations are session-only unless the user opts in (doc 06 §7).
 //  - Every request is logged to the Privacy Dashboard (origin, size, where).
+import { summaryIntent } from './summary_intent';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { BrowserApp } from '../browser_app';
@@ -124,7 +125,11 @@ export class AssistantService {
       {
         getState: (ctx) => this.state(win(ctx)),
         summarize: (ctx, style) => this.run(win(ctx), { kind: 'summarize', style }),
-        ask: (ctx, q) => this.run(win(ctx), { kind: 'ask', question: q }),
+        ask: (ctx, q) => {
+          // "Summarize this page" typed in the box runs the summary, like the quick actions.
+          const style = summaryIntent(q);
+          return this.run(win(ctx), style ? { kind: 'summarize', style } : { kind: 'ask', question: q });
+        },
         compare: (ctx, tabIds, q) => this.run(win(ctx), { kind: 'compare', question: q || t('compare_default_question') }, tabIds),
         revealCitation: (ctx, messageId, chunkId) => this.reveal(win(ctx), messageId, chunkId),
         escalate: (ctx, messageId) => this.escalate(win(ctx), messageId),

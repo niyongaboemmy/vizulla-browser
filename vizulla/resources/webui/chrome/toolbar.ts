@@ -67,8 +67,8 @@ export class VzToolbar extends LitElement {
       .sep { width: 1px; height: 18px; background: var(--vz-border); margin: 0 6px; }
       .toast { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; height: 30px; padding: 0 4px 0 12px; border-radius: 999px; font-size: 12px;
         background: var(--vz-bg-elev); box-shadow: var(--vz-shadow-pop); animation: pop 220ms var(--vz-ease); }
-      .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .toast button { border: 0; background: transparent; color: var(--vz-accent); font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 999px; font-size: 12px; }
+      .toast span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .toast button { flex: none; white-space: nowrap; border: 0; background: transparent; color: var(--vz-accent); font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 999px; font-size: 12px; }
       .toast button:hover { background: var(--vz-surface-hover); }
       @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } }
       .on { color: var(--vz-accent); background: var(--vz-accent-soft); }

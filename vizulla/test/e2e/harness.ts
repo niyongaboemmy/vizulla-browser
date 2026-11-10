@@ -78,6 +78,8 @@ const PAGES: Record<string, string> = {
   '/sso-provider': `<!doctype html><title>Provider sign-in</title><p id="who"></p><button id="allow">Continue as Ada</button><script>
     document.getElementById('who').textContent = window.opener ? 'opener ok' : 'no opener';
     document.getElementById('allow').onclick = () => { window.opener.postMessage('token-123', '*'); window.close(); };</script>`,
+  // A transparent favicon (a ring with a clear middle): nothing may show through it.
+  '/fav': '<!doctype html><title>Ring icon</title><link rel="icon" href="/ring.png"><h1>Ring</h1>',
   '/gemini': `<!doctype html><title>Gemini</title><div contenteditable="true" role="textbox" aria-label="Enter a prompt here" style="min-height:40px;border:1px solid #ccc"></div>`,
   '/pwa': `<!doctype html><title>Vizulla Test App</title><link rel="manifest" href="/manifest.webmanifest"><h1>Test app</h1><script>
     window.__bip = null; addEventListener('beforeinstallprompt', (e) => { window.__bip = e; }); addEventListener('appinstalled', () => { window.__installed = true; });</script>`,
@@ -88,6 +90,36 @@ const PAGES: Record<string, string> = {
 };
 
 /** A solid-colour PNG (the test app's icon). */
+function ringPng(): Buffer {
+  const size = 16;
+  const crc = (buf: Buffer) => {
+    let c = ~0;
+    for (const b of buf) {
+      c ^= b;
+      for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
+    }
+    return ~c >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4);
+    c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6; // RGBA
+  const rows = Array.from({ length: size }, (_, y) => Buffer.concat([Buffer.from([0]), ...Array.from({ length: size }, (_, x) => {
+    const d = Math.hypot(x - 7.5, y - 7.5);
+    return Buffer.from(d > 5 && d < 7.5 ? [26, 115, 232, 255] : [0, 0, 0, 0]);
+  })]));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
+}
+
 function solidPng(size: number, [r, g, b]: number[]): Buffer {
   return png(size, () => Buffer.alloc(size * 3, Buffer.from([r!, g!, b!])));
 }
@@ -137,6 +169,12 @@ export async function startServer(): Promise<{ server: Server; base: string }> {
       // A real-world-sized icon: noise compresses badly (hundreds of KB, like a detailed logo).
       res.writeHead(200, { 'content-type': 'image/png' });
       res.end(noisyPng(512));
+      return;
+    }
+    if (path === '/ring.png') {
+      // 16×16 RGBA: a blue ring around a fully transparent centre.
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(ringPng());
       return;
     }
     if (path === '/icon.png') {

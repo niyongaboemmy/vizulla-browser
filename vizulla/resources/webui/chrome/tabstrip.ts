@@ -75,7 +75,7 @@ export class VzTabstrip extends LitElement {
       .tab.pinned .body { justify-content: center; padding: 0; margin: 3px; }
       .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; mask-image: linear-gradient(90deg, #000 85%, transparent); }
       .fav { width: 16px; height: 16px; display: grid; place-items: center; flex: none; position: relative; }
-      .fav img, .fav .vz-icon { width: 16px; height: 16px; border-radius: 3px; }
+      .fav img, .fav .vz-icon { width: 16px; height: 16px; }
       .fav.loading::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--vz-accent); border-right-color: transparent; animation: vz-spin .8s linear infinite; }
       .fav.asleep { opacity: .5; }
       /* padding: 0 matters: the default button padding (6px a side) would leave 8px for the 12px glyph and push it off-centre.

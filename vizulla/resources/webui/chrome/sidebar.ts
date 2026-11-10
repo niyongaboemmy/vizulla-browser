@@ -93,7 +93,7 @@ export class VzSidebar extends LitElement {
       .tab.split::after { content: ''; position: absolute; inset-inline-start: 2px; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--vz-accent); }
       .drop-line { height: 2px; margin: -1px 8px; background: var(--vz-accent); border-radius: 1px; }
       .fav { width: 16px; height: 16px; border-radius: 4px; flex: none; display: grid; place-items: center; color: var(--vz-text-3); }
-      .fav img { width: 16px; height: 16px; border-radius: 3px; }
+      .fav img { width: 16px; height: 16px; }
 
       .group { margin: 2px 0; border-radius: var(--vz-radius); }
       .group-head { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 4px; border-radius: var(--vz-radius-s); cursor: pointer; color: var(--vz-text-2); font-size: var(--vz-text-s); font-weight: 650; }
@@ -116,9 +116,13 @@ export class VzSidebar extends LitElement {
       .meta button:hover { background: var(--vz-surface-hover); color: var(--vz-text-2); }
 
       .toasts { position: absolute; left: 8px; right: 0; bottom: 74px; display: flex; flex-direction: column; gap: 6px; z-index: 3; }
-      .toast { display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 12px; border-radius: var(--vz-radius); background: var(--vz-text); color: var(--vz-bg-elev); box-shadow: var(--vz-shadow-pop); font-size: var(--vz-text-s); animation: pop 220ms var(--vz-ease); }
-      .toast span { flex: 1; }
-      .toast button { border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 700; font-size: inherit; padding: 2px 4px; border-radius: 999px; }
+      /* Message on its own line (close beside it), the action on one line underneath: reads well in any sidebar width. */
+      .toast { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 6px; row-gap: 4px; padding: 9px 8px 9px 12px; border-radius: var(--vz-radius); background: var(--vz-text); color: var(--vz-bg-elev); box-shadow: var(--vz-shadow-pop); font-size: var(--vz-text-s); animation: pop 220ms var(--vz-ease); }
+      .toast span { min-width: 0; line-height: 1.4; padding-top: 2px; overflow-wrap: break-word; }
+      .toast .act { grid-column: 1; grid-row: 2; justify-self: start; margin-left: -6px; }
+      .toast .close { grid-column: 2; grid-row: 1; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; }
+      /* Actions ("Show in folder", "Undo") stay on one line. */
+      .toast button { flex: none; white-space: nowrap; border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 700; font-size: inherit; padding: 2px 6px; border-radius: 999px; }
       .toast button:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
       @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
     `,
@@ -178,8 +182,8 @@ export class VzSidebar extends LitElement {
         <div style="height:40px" @dragover=${(e: DragEvent) => this.onDragOver(e, { index: tabs.length, groupId: null, zone: 'list' })} @drop=${(e: DragEvent) => this.onDrop(e)}></div>
       </div>
       ${s.toasts.length ? html`<div class="toasts" role="status" aria-live="polite">${s.toasts.map((x) => html`<div class="toast"><span>${x.text}</span>
-          ${x.action ? html`<button @click=${() => shell.toastAction(x.id)}>${x.action.label}</button>` : nothing}
-          <button aria-label=${t('action_close')} @click=${() => shell.dismissToast(x.id)}>${icon('x', 12)}</button></div>`)}</div>` : nothing}
+          <button class="close" aria-label=${t('action_close')} @click=${() => shell.dismissToast(x.id)}>${icon('x', 12)}</button>
+          ${x.action ? html`<button class="act" @click=${() => shell.toastAction(x.id)}>${x.action.label}</button>` : nothing}</div>`)}</div>` : nothing}
       <div class="footer">
         <div class="spaces" role="tablist" aria-label=${t('spaces')}>
           ${s.spaces.map((sp, i) => html`<button class="space-btn ${sp.id === s.activeSpaceId ? 'active' : ''} ${this.drop && (this.drop as unknown as { space?: string }).space === sp.id ? 'drop' : ''}"
