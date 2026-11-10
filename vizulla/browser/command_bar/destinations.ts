@@ -64,6 +64,7 @@ export const DESTINATIONS: Destination[] = [
   P('downloads', 'vizulla://downloads/', 'cmd_downloads', 'download', 'downloads files downloaded téléchargements vipakuliwa ibyakuruwe'),
   P('passwords', 'vizulla://passwords/', 'cmd_passwords', 'key', 'passwords password manager logins accounts credentials mots de passe identifiants nenosiri ijambo ry ibanga konti'),
   P('extensions', 'vizulla://extensions/', 'cmd_extensions', 'puzzle', 'extensions add-ons addons plugins chrome web store install extension viendelezi inyongera'),
+  P('apps', 'vizulla://apps/', 'cmd_apps', 'app-install', 'apps installed web apps pwa progressive web app install applications programu porogaramu'),
   P('task-manager', 'vizulla://task-manager/', 'cmd_task_manager', 'cpu', 'task manager memory cpu slow performance processes gestionnaire tâches lenteur polepole buhoro'),
   P('privacy-dashboard', 'vizulla://privacy/', 'cmd_privacy_dashboard', 'shield-check', 'privacy dashboard blocked trackers report tableau de bord'),
   P('archive-page', 'vizulla://archive/', 'cmd_archive', 'archive', 'archived tabs archive closed tabs'),

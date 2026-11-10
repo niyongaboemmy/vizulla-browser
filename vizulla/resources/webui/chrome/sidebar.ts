@@ -80,7 +80,7 @@ export class VzSidebar extends LitElement {
       :host-context([data-density=compact]) .tab { --row-h: 28px; }
       .tab:hover { background: var(--vz-surface-hover); }
       /* Same pill as the top tab strip: no card, no border. */
-      .tab.active { background: color-mix(in srgb, var(--vz-text) 9%, transparent); box-shadow: var(--vz-glass-edge, 0 0 transparent); }
+      .tab.active { background: color-mix(in srgb, var(--vz-text) 9%, transparent); }
       .tab:focus-visible { outline: 2px solid var(--vz-focus); outline-offset: -2px; }
       .tab.discarded .title, .tab.discarded img { opacity: 0.55; }
       .tab.dragging { opacity: 0.4; }
@@ -108,7 +108,7 @@ export class VzSidebar extends LitElement {
       .spaces { flex: 1; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
       .space-btn { width: 30px; height: 30px; border-radius: 50%; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2); position: relative; flex: none; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .space-btn:hover { background: var(--vz-surface-hover); color: var(--vz-text); }
-      .space-btn.active { color: var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
+      .space-btn.active { --sc: var(--vz-space-ink, var(--c)); color: var(--sc); background: color-mix(in srgb, var(--sc) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sc) 45%, transparent); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
       @keyframes vz-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .space-btn.drop { transform: scale(1.18); background: color-mix(in srgb, var(--c) 26%, transparent); color: var(--c); }
       .meta { display: flex; gap: 6px; padding: 4px 6px 0; font-size: var(--vz-text-xs); color: var(--vz-text-3); }

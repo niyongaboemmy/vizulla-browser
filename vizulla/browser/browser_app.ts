@@ -21,12 +21,12 @@ import { UpdateService } from './updates/update_service';
 import { PasswordService } from './passwords/password_service';
 import { ExtensionsService } from './extensions/extensions_service';
 import { WebTab } from './tabs/web_tab';
+import { installJsDialogs, type DialogHost } from './ui/js_dialogs';
 import { profileArgs, Profiles } from './profiles/profiles';
 import { BRANDING } from '../app/branding';
 import { destinationUrl, matchDestinations } from './command_bar/destinations';
 import { EngineSuggest } from './command_bar/engine_suggest';
 import { ToolsService } from './tools/tools_service';
-import { hasGlass } from './ui/glass';
 import { installDevTools } from './tools/dev_tools';
 import { McpServer } from './mcp/mcp_server';
 import { permissionsUi } from './permissions/permissions_ui';
@@ -73,6 +73,10 @@ export class BrowserApp {
   /** Permission prompts, device choosers and the screen picker (permissions_ui.ts). */
   private readonly permissionsUi = permissionsUi(this);
   readonly tools: ToolsService;
+  /** Installed web apps (apps/web_apps.ts), set up with the phase services. */
+  webApps: import('./apps/web_apps').WebAppsService | null = null;
+  /** An installed app's window in front takes the menu shortcuts it understands. */
+  appCommand: ((id: string) => boolean) | null = null;
   mcp!: McpServer;
   private readonly engineSuggest = new EngineSuggest();
   /** Where each window's extensions menu was opened (popups anchor there). */
@@ -99,6 +103,7 @@ export class BrowserApp {
       const frame = e.senderFrame?.url ?? e.sender.getURL();
       return profile.shields.cosmeticFor(frame, e.senderFrame?.top?.url ?? frame, { classes: list(o.classes), ids: list(o.ids), hrefs: list(o.hrefs) });
     });
+    installJsDialogs(this);
     this.applyLocale();
     WebTab.fonts = () => {
       const p = profile.prefs;
@@ -110,7 +115,7 @@ export class BrowserApp {
       this.buildMenu();
       this.broadcastState();
     });
-    for (const k of ['appearance.theme', 'appearance.accent', 'appearance.density', 'tabs.layout', 'tabs.classic', 'ai.mode', 'flags.user'] as const) {
+    for (const k of ['appearance.theme', 'appearance.accent', 'appearance.density', 'appearance.siteColors', 'tabs.layout', 'tabs.classic', 'ai.mode', 'flags.user'] as const) {
       profile.prefs.observe(k, () => this.broadcastState());
     }
     profile.prefs.observe('appearance.theme', (v) => {
@@ -180,6 +185,26 @@ export class BrowserApp {
     for (const w of this.windows) for (const tab of w.tabs.values()) if (tab.wc === wc) return { window: w, tab };
     return null;
   }
+
+  /** Where a page's dialogs appear (ui/js_dialogs.ts): its window's overlay, with its tab brought forward. */
+  dialogHost(wc: Electron.WebContents): DialogHost | null {
+    const found = this.findTabByWebContents(wc);
+    if (found) {
+      return {
+        overlay: found.window.overlay,
+        // The overlay can't load remote images: only an embedded (data:) favicon is shown.
+        favicon: found.tab.favicon?.startsWith('data:image/') ? found.tab.favicon : null,
+        focus: () => {
+          if (found.window.activeTab()?.id !== found.tab.id) found.window.activateTab(found.tab.id);
+          if (found.window.win.isMinimized()) found.window.win.restore();
+        },
+      };
+    }
+    return this.appDialogHost?.(wc) ?? null;
+  }
+
+  /** Installed web apps' windows host their own dialogs (apps/web_apps.ts). */
+  appDialogHost: ((wc: Electron.WebContents) => DialogHost | null) | null = null;
 
   // ------------------------------------------------------------ windows
 
@@ -326,6 +351,7 @@ export class BrowserApp {
   }
 
   async runCommand(w: BrowserWindowController | null, id: string, args?: Record<string, unknown>): Promise<void> {
+    if (!w && this.appCommand?.(id)) return;
     const target = w ?? this.focused();
     const handler = this.commandHandlers.get(id);
     const def = findCommand(id);
@@ -492,6 +518,13 @@ export class BrowserApp {
     c.set('page.downloads', page('vizulla://downloads'));
     c.set('page.extensions', page('vizulla://extensions'));
     c.set('page.taskManager', page('vizulla://task-manager'));
+    c.set('page.apps', page('vizulla://apps'));
+    c.set('app.install', (w) => {
+      const x = tab(w);
+      if (x && this.webApps?.stateFor(x.wc)?.state === 'installable') void this.webApps.promptInstall(w, x.id);
+      else if (x && this.webApps?.stateFor(x.wc)?.state === 'installed') this.webApps.openInApp(w, x.id);
+      else w.toast(t('app_not_installable'), undefined, 3000);
+    });
     c.set('window.closePrivate', () => {
       for (const x of [...this.windows]) if (x.profile.isPrivate) x.win.close();
     });
@@ -576,6 +609,8 @@ export class BrowserApp {
         },
         showProfileMenu: (ctx, point) => this.showProfileMenu(win(ctx), point),
         showTip: (ctx, r, doc) => void win(ctx).tip.show(r, doc),
+        installApp: (ctx, id) => void this.webApps?.promptInstall(win(ctx), id),
+        openInApp: (ctx, id) => this.webApps?.openInApp(win(ctx), id),
         hideTip: (ctx) => win(ctx).tip.hide(),
         detachTabs: (ctx, ids, point) => void this.moveTabs(ids.filter((x) => win(ctx).tabs.has(x)), 'new', { point }),
         adoptTabs: (ctx, ids, index) => void this.moveTabs(ids, win(ctx), { index }),
@@ -717,6 +752,11 @@ export class BrowserApp {
         },
         appMenuAction: (ctx, id) => {
           const w = win(ctx);
+          // Zoom and theme rows keep the menu open, so the change can be seen and adjusted.
+          if (/^theme:(system|light|dark)$/.test(id)) {
+            this.profile.prefs.set('appearance.theme', id.slice(6) as 'system' | 'light' | 'dark');
+            return this.appMenuModel(w);
+          }
           const stay = id === 'view.zoomIn' || id === 'view.zoomOut' || id === 'view.zoomReset';
           if (!stay) w.overlay.close();
           if (id === 'tools.menu') {
@@ -751,7 +791,7 @@ export class BrowserApp {
           // A page's init may be async (e.g. extensions finish loading first).
           const data = (await handlers?.init?.(null, { ...ctx, window: w })) ?? null;
           const theme = w?.profile.isPrivate ? 'dark' : this.profile.prefs.get('appearance.theme');
-          return { locale: this.locale, theme, accent: this.profile.prefs.get('appearance.accent'), glass: hasGlass && theme !== 'high-contrast', data };
+          return { locale: this.locale, theme, accent: this.profile.prefs.get('appearance.accent'), data };
         },
         invoke: (ctx, method, payload) => {
           const fn = this.pageHandlers.get(ctx.host)?.[method];
@@ -968,16 +1008,22 @@ export class BrowserApp {
     };
     const group = (...ids: (string | [string, true])[]) => ids.map((x) => (Array.isArray(x) ? item(x[0], true) : item(x))).filter(Boolean);
     const u = this.updates.info();
-    return {
+    const model = {
       zoom: Math.round((w.activeTab()?.zoom ?? 1) * 100),
+      // Private windows are always dark: no theme row there.
+      theme: w.profile.isPrivate ? null : this.profile.prefs.get('appearance.theme'),
       update: u && (u.status === 'available' || u.status === 'ready') ? t(u.status === 'ready' ? 'upd_ready' : 'upd_available', { version: u.version }) : null,
       groups: [
         group('tab.new', 'window.new', 'window.newPrivate'),
-        group('page.history', 'page.downloads', 'page.bookmarks', 'page.passwords', 'page.extensions'),
+        group('page.history', 'page.downloads', 'page.bookmarks', 'page.passwords', 'page.extensions', 'page.apps'),
         group(['tools.menu', true], 'view.find', 'tools.print', 'tools.savePdf', 'page.taskManager'),
         group('page.settings', 'page.about'),
       ],
     };
+    // A page that can be installed (or is): its own item at the top, like Chrome's "Install…".
+    const inst = w.profile.isPrivate ? null : this.webApps?.stateFor(w.activeTab()?.wc);
+    if (inst) model.groups.unshift([{ id: 'app.install', label: t(inst.state === 'installable' ? 'app_install_menu' : 'app_open_in', { name: inst.name }), shortcut: '', enabled: true, sub: false }]);
+    return model;
   }
 
   appMenu(w: BrowserWindowController | null): Menu {

@@ -5,7 +5,7 @@ import { base, pageStyles } from '../shared/styles';
 import { icon } from '../shared/icons';
 import '../shared/select';
 import { VzPage, switchStyles, timeAgo } from '../shared/page_base';
-import { applyLocale, applyTheme } from '../shared/theme';
+import { applyLocale, applyTheme, resolveTheme } from '../shared/theme';
 import { ACCENT_LABELS } from '@vz/common/tokens';
 import { t, getLocale, type StringKey } from '@vz/common/i18n';
 import { page } from '../shared/bridge';
@@ -75,6 +75,8 @@ interface Row {
   desc?: string;
   control: () => TemplateResult;
   keywords?: string;
+  /** The control goes under the title, full width (e.g. theme cards). */
+  block?: boolean;
 }
 
 class VzSettings extends VzPage<Data> {
@@ -118,6 +120,7 @@ class VzSettings extends VzPage<Data> {
       h2.sec-title { font-size: 20px; margin: 4px 0 14px; letter-spacing: -0.01em; }
       .row { padding: 12px 18px; }
       .row + .row { border-top: 1px solid var(--vz-border); }
+      .row.block { flex-direction: column; align-items: stretch; gap: 12px; }
       select { min-width: 180px; height: 32px; }
       .seg { display: inline-flex; flex-wrap: wrap; background: var(--vz-surface-2); border-radius: 999px; padding: 3px; gap: 2px; }
       .seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; transition: background var(--vz-dur), color var(--vz-dur); cursor: pointer; font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text-2); }
@@ -138,6 +141,27 @@ class VzSettings extends VzPage<Data> {
       td.pw { font-family: var(--vz-font-mono); }
       .engine { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
       .engine input[name=name] { width: 140px; } .engine input[name=url] { width: 260px; max-width: 100%; }
+      /* Theme cards: a tiny window drawn in each look ("System" is half light, half dark). */
+      .theme-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; width: 100%; }
+      .theme-card { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 14px; cursor: pointer; border: 1px solid var(--vz-border); background: var(--vz-surface-2); transition: border-color var(--vz-dur), box-shadow var(--vz-dur), transform 220ms cubic-bezier(.34,1.56,.64,1); }
+      .theme-card:hover { transform: translateY(-2px); }
+      .theme-card:focus-visible { outline: 2px solid var(--vz-focus); outline-offset: 2px; }
+      .theme-card[aria-checked='true'] { border-color: var(--vz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vz-accent) 20%, transparent); }
+      .tc-prev { --w: #ffffff; --f: #e7ecf3; --o: #edf1f7; --l: #cbd5e1; display: block; height: 64px; border-radius: 9px; padding: 8px 8px 0; background: var(--f); overflow: hidden; }
+      .tc-dark { --w: #26282e; --f: #1a1c21; --o: #3a3d45; --l: #4b5060; }
+      .tc-high-contrast { --w: #000; --f: #000; --o: #000; --l: #fff; box-shadow: inset 0 0 0 1px #fff; }
+      .tc-system { background: linear-gradient(135deg, #e7ecf3 50%, #1a1c21 50%); }
+      .tc-system .tc-win { background: linear-gradient(135deg, #ffffff 50%, #26282e 50%); }
+      .tc-win { display: flex; flex-direction: column; gap: 5px; height: 100%; padding: 6px; border-radius: 6px 6px 0 0; background: var(--w); }
+      .tc-high-contrast .tc-win { box-shadow: inset 0 0 0 1px #fff; }
+      .tc-bar { height: 4px; width: 40%; border-radius: 2px; background: var(--vz-accent); }
+      .tc-omni { height: 8px; border-radius: 4px; background: var(--o); }
+      .tc-system .tc-omni { background: linear-gradient(135deg, #edf1f7 50%, #3a3d45 50%); }
+      .tc-line { height: 4px; border-radius: 2px; background: var(--l); }
+      .tc-system .tc-line { background: #94a3b8; }
+      .tc-line.short { width: 60%; }
+      .tc-name { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text); }
+      @media (max-width: 760px) { .theme-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
       .checkup { margin-bottom: 16px; padding: 16px 18px; }
       .checkup-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
       .checkup-head .grow { flex: 1; min-width: 200px; }
@@ -205,6 +229,8 @@ class VzSettings extends VzPage<Data> {
 
   protected override loaded(): void {
     page.on('changed', () => void this.invoke<Data>('init').then((d) => (this.data = d)));
+    // "Following your computer — now Dark" stays true when the computer switches.
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.requestUpdate());
     const q = this.filter;
     this.go(this.section);
     this.filter = q;
@@ -241,6 +267,21 @@ class VzSettings extends VzPage<Data> {
     return html`<div class="seg" role="group" aria-label=${key}>${options.map((o) => html`<button aria-pressed=${this.p[key] === o.id} @click=${() => void this.set(key, o.id)}>${o.name}</button>`)}</div>`;
   }
 
+  /** The theme as cards with a small preview of the window in each look. */
+  private themeCards() {
+    const cards = [
+      { id: 'system', icon: 'monitor', name: t('theme_system') },
+      { id: 'light', icon: 'sun', name: t('theme_light') },
+      { id: 'dark', icon: 'moon', name: t('theme_dark') },
+      { id: 'high-contrast', icon: 'contrast', name: t('theme_high_contrast') },
+    ];
+    return html`<div class="theme-cards" role="radiogroup" aria-label=${t('set_theme')}>${cards.map((c) => html`
+      <button class="theme-card" role="radio" aria-checked=${this.p['appearance.theme'] === c.id} @click=${() => void this.set('appearance.theme', c.id)}>
+        <span class="tc-prev tc-${c.id}" aria-hidden="true"><span class="tc-win"><span class="tc-bar"></span><span class="tc-omni"></span><span class="tc-line"></span><span class="tc-line short"></span></span></span>
+        <span class="tc-name">${icon(c.icon, 14)} ${c.name}</span>
+      </button>`)}</div>`;
+  }
+
   private number(key: string, min: number, max: number, unit: string) {
     return html`<span style="display:inline-flex;align-items:center;gap:8px"><input type="text" inputmode="numeric" style="width:72px" .value=${String(this.p[key])}
       aria-label=${key} @change=${(e: Event) => {
@@ -264,7 +305,8 @@ class VzSettings extends VzPage<Data> {
       { section: 'general', label: L('set_downloads_ask'), control: () => this.sw('downloads.askWhere') },
       { section: 'general', label: L('settings_updates_auto'), desc: L('settings_updates_auto_desc'), keywords: 'update upgrade version release',
         control: () => html`<button class="icon-btn" title=${L('cmd_check_updates')} aria-label=${L('cmd_check_updates')} @click=${() => this.invoke('command', { id: 'app.checkUpdates' })}>${icon('refresh', 15)}</button>${this.sw('updates.autoCheck')}` },
-      { section: 'appearance', label: L('set_theme'), control: () => this.seg('appearance.theme', [{ id: 'system', name: L('theme_system') }, { id: 'light', name: L('theme_light') }, { id: 'dark', name: L('theme_dark') }, { id: 'high-contrast', name: L('theme_high_contrast') }]), keywords: 'dark light mode contrast' },
+      { section: 'appearance', label: L('set_theme'), block: true, desc: this.p['appearance.theme'] === 'system' ? t('theme_following', { theme: L(resolveTheme('system') === 'dark' ? 'theme_dark' : 'theme_light') }) : L('theme_fixed_desc'), control: () => this.themeCards(), keywords: 'dark light mode contrast system computer automatic appearance' },
+      { section: 'appearance', label: L('set_site_colors'), desc: L('set_site_colors_desc'), control: () => this.sw('appearance.siteColors'), keywords: 'color colour toolbar frame tint website theme-color mobile' },
       { section: 'appearance', label: L('set_accent'), desc: L('set_accent_desc'), control: () => this.select('appearance.accent', (Object.keys(ACCENT_LABELS) as (keyof typeof ACCENT_LABELS)[]).map((c) => ({ id: c, name: ACCENT_LABELS[c] }))), keywords: 'color' },
       { section: 'appearance', label: L('set_density'), control: () => this.seg('appearance.density', [{ id: 'comfortable', name: L('density_comfortable') }, { id: 'compact', name: L('density_compact') }]) },
       { section: 'appearance', label: L('set_layout'), desc: L('set_layout_desc'), control: () => this.seg('tabs.layout', [{ id: 'vertical', name: L('layout_vertical') }, { id: 'horizontal', name: L('layout_horizontal') }]), keywords: 'tabs top side' },
@@ -354,7 +396,7 @@ class VzSettings extends VzPage<Data> {
         ${!q && this.section === 'shields' ? this.renderCheckup() : nothing}
         ${!q && this.section === 'ai' ? this.renderAi() : nothing}
         ${!q && this.section === 'sync' ? this.renderSync() : nothing}
-        ${visible.length ? html`<div class="card rise">${visible.map((r) => html`<div class="row"><div class="grow"><div class="title">${r.label}</div>${r.desc ? html`<div class="desc">${r.desc}</div>` : nothing}</div>${this.withLabel(r.label, r.control)}</div>`)}</div>` : nothing}
+        ${visible.length ? html`<div class="card rise">${visible.map((r) => html`<div class="row ${r.block ? 'block' : ''}"><div class="grow"><div class="title">${r.label}</div>${r.desc ? html`<div class="desc">${r.desc}</div>` : nothing}</div>${this.withLabel(r.label, r.control)}</div>`)}</div>` : nothing}
         ${!q && this.section === 'agent' && this.data!.features.VizullaAgentStageB ? this.renderAgentProfile() : nothing}
         ${!q && this.section === 'passwords' ? this.renderPasswords() : nothing}
         ${!q && this.section === 'import' ? this.renderImport() : nothing}

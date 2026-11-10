@@ -51,16 +51,15 @@ class VzExtensions extends VzPage<Data> {
       .lead { color: var(--vz-text-2); margin: -16px 0 20px; }
       .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
       .bar .search { flex: 1; min-width: 200px; }
-      .get { display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-radius: 22px; margin-bottom: 18px; border: 1px solid var(--vz-glass-border);
-        background: linear-gradient(120deg, color-mix(in srgb, var(--vz-accent) 12%, var(--vz-glass-strong)), var(--vz-glass-strong)); backdrop-filter: blur(20px) saturate(160%); }
+      .get { display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-radius: 22px; margin-bottom: 18px; border: 1px solid var(--vz-border);
+        background: linear-gradient(120deg, color-mix(in srgb, var(--vz-accent) 12%, var(--vz-bg-elev)), var(--vz-bg-elev)); }
       .get .grow { flex: 1; min-width: 0; }
       .get h2 { margin: 0 0 2px; font-size: var(--vz-text-l); }
       .get .paste { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
       .get .paste input { flex: 1; min-width: 220px; }
       .err { color: var(--vz-danger); font-size: var(--vz-text-s); margin-top: 6px; }
       .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-      .ext { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 20px; border: 1px solid var(--vz-border); background: var(--vz-glass-strong);
-        backdrop-filter: blur(20px) saturate(160%); animation: vz-rise 320ms var(--vz-ease) both; transition: border-color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .ext { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 20px; border: 1px solid var(--vz-border); background: var(--vz-bg-elev); animation: vz-rise 320ms var(--vz-ease) both; transition: border-color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .ext:hover { border-color: color-mix(in srgb, var(--vz-accent) 35%, var(--vz-border)); transform: translateY(-2px); }
       .ext.off { opacity: .72; }
       .ext.broken { border-color: color-mix(in srgb, var(--vz-danger) 45%, var(--vz-border)); }
@@ -74,7 +73,7 @@ class VzExtensions extends VzPage<Data> {
       .ext-foot { display: flex; gap: 6px; align-items: center; }
       .ext-foot .grow { flex: 1; }
       .chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--vz-surface-2); color: var(--vz-text-2); }
-      .detail { padding: 22px; border-radius: 22px; border: 1px solid var(--vz-border); background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); animation: vz-rise 260ms var(--vz-ease); }
+      .detail { padding: 22px; border-radius: 22px; border: 1px solid var(--vz-border); background: var(--vz-bg-elev); animation: vz-rise 260ms var(--vz-ease); }
       .detail .ext-head img, .detail .mono { width: 56px; height: 56px; border-radius: 14px; }
       .detail h2 { margin: 0; font-size: var(--vz-text-xl); }
       dl { display: grid; grid-template-columns: 160px 1fr; gap: 10px 16px; margin: 20px 0; font-size: var(--vz-text-m); }

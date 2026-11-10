@@ -55,11 +55,15 @@ export class VzToolbar extends LitElement {
         cursor: pointer; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; transition: background var(--vz-dur); }
       .chip-btn:hover { background: var(--vz-surface-hover); }
       .chip-btn.has { color: var(--vz-accent); }
+      /* "Install": a soft accent pill that arrives with a little spring, hard to miss but quiet. */
+      .chip-btn.install { gap: 5px; padding: 0 10px 0 8px; font-size: 12px; font-weight: 650; color: var(--vz-accent); background: var(--vz-accent-soft); animation: install-in 420ms cubic-bezier(.34,1.56,.64,1); }
+      .chip-btn.install:hover { background: color-mix(in srgb, var(--vz-accent) 20%, transparent); }
+      @keyframes install-in { from { opacity: 0; transform: scale(.7); } }
       .lead { width: var(--traffic, 0); flex: none; }
       .end { width: var(--controls, 0); flex: none; }
       .sep { width: 1px; height: 18px; background: var(--vz-border); margin: 0 6px; }
       .toast { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; height: 30px; padding: 0 4px 0 12px; border-radius: 999px; font-size: 12px;
-        background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--vz-glass-shadow); animation: pop 220ms var(--vz-ease); }
+        background: var(--vz-bg-elev); box-shadow: var(--vz-shadow-pop); animation: pop 220ms var(--vz-ease); }
       .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .toast button { border: 0; background: transparent; color: var(--vz-accent); font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 999px; font-size: 12px; }
       .toast button:hover { background: var(--vz-surface-hover); }
@@ -127,6 +131,11 @@ export class VzToolbar extends LitElement {
         <button class="addr" title=${t('cb_address_label')} data-kbd=${mac ? '⌘L' : 'Ctrl+L'} @click=${(e: MouseEvent) => this.open(e)}>
           ${host ? html`<span class="host">${host}</span><span class="path">${path}</span>` : html`<span class="ph">${t('cb_placeholder')}</span>`}
         </button>
+        ${tab && s.install?.state === 'installable'
+          ? html`<button class="chip-btn install" aria-label=${t('app_install_named', { name: s.install.name })} title=${t('app_install_named', { name: s.install.name })} @click=${() => shell.installApp(tab.id)}>${icon('app-install', 14)}<span>${t('app_install')}</span></button>`
+          : tab && s.install?.state === 'installed'
+            ? html`<button class="chip-btn wide" aria-label=${t('app_open_in', { name: s.install.name })} title=${t('app_open_in', { name: s.install.name })} @click=${() => shell.openInApp(tab.id)}>${icon('external', 14)}</button>`
+            : nothing}
         ${tab && /^https?:/.test(tab.url)
           ? html`<button class="chip-btn ${tab.blocked ? 'has' : ''}" aria-label=${t('shields_button', { count: tab.blocked })} title=${t('shields_button', { count: tab.blocked })}
               @click=${(e: MouseEvent) => {

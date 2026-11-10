@@ -19,11 +19,23 @@ export function applyTheme(pref: ThemePref | string, accent: SpaceColor | string
   lastAccent = accent as SpaceColor;
   const resolved = resolveTheme(pref);
   const root = document.documentElement;
+  // Switching between light and dark cross-fades the whole page (View Transitions), instead of snapping.
+  const before = root.dataset.theme;
+  const fade = before && before !== resolved && 'startViewTransition' in document && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (fade) {
+    (document as Document & { startViewTransition(cb: () => void): unknown }).startViewTransition(() => paint(resolved, accent as SpaceColor, density));
+    return resolved;
+  }
+  paint(resolved, accent as SpaceColor, density);
+  return resolved;
+}
+
+function paint(resolved: ResolvedTheme, accent: SpaceColor, density: 'comfortable' | 'compact'): void {
+  const root = document.documentElement;
   for (const [k, val] of Object.entries(cssVariables(resolved, accent as SpaceColor))) root.style.setProperty(k, val);
   root.dataset.theme = resolved;
   root.dataset.density = density;
   root.style.colorScheme = resolved === 'light' ? 'light' : 'dark';
-  return resolved;
 }
 
 media.addEventListener('change', () => applyTheme(lastPref, lastAccent, (document.documentElement.dataset.density as 'compact') ?? 'comfortable'));

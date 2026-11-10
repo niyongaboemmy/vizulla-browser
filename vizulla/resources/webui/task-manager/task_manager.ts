@@ -29,7 +29,7 @@ class VzTaskManager extends VzPage<Data> {
     pageStyles,
     css`
       .lead { color: var(--vz-text-2); margin: -16px 0 18px; }
-      .table { border-radius: 20px; border: 1px solid var(--vz-border); background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); overflow: hidden; }
+      .table { border-radius: 20px; border: 1px solid var(--vz-border); background: var(--vz-bg-elev); overflow: hidden; }
       .tr { display: grid; grid-template-columns: minmax(0, 1fr) 110px 70px 90px 132px; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--vz-border); }
       .tr.head { border-top: 0; font-size: var(--vz-text-s); color: var(--vz-text-2); font-weight: 600; background: var(--vz-surface-2); }
       .tr.head button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }

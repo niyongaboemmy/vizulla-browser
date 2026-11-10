@@ -34,7 +34,7 @@ class VzNewTab extends VzPage<Data> {
     base,
     pageStyles,
     css`
-      :host { display: grid; place-items: start center; min-height: 100vh; background: var(--vz-ntp-bg, var(--vz-toolbar)); }
+      :host { display: grid; place-items: start center; min-height: 100vh; background: var(--vz-toolbar); }
       .wrap { width: min(584px, calc(100vw - 48px)); padding-top: 18vh; display: flex; flex-direction: column; align-items: center; }
       .glyph { display: grid; margin-bottom: 30px; }
       /* Chrome-style search pill: filled, no border; white with an accent ring on hover/focus. */
@@ -72,7 +72,7 @@ class VzNewTab extends VzPage<Data> {
       .priv .lead { margin: -8px 0 0; color: var(--vz-text-2); max-width: 560px; }
       .priv .bar { max-width: 584px; text-align: left; }
       .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: 100%; text-align: left; }
-      .col { padding: 18px; border-radius: 20px; border: 1px solid var(--vz-glass-border); background: var(--vz-glass); backdrop-filter: blur(20px) saturate(160%); animation: vz-rise 380ms var(--vz-ease) both; }
+      .col { padding: 18px; border-radius: 20px; border: 1px solid var(--vz-border); background: var(--vz-bg-elev); animation: vz-rise 380ms var(--vz-ease) both; }
       .col h2 { margin: 0 0 10px; font-size: var(--vz-text-m); display: flex; gap: 8px; align-items: center; }
       .col ul { margin: 0; padding-left: 18px; color: var(--vz-text-2); font-size: var(--vz-text-s); line-height: 1.7; }
       .col.on h2 { color: #93c5fd; }

@@ -6,6 +6,7 @@
 // Real clicks and key presses are reported so pages can open tabs only right after
 // one, like Chrome's popup blocker (shields/platform_features.ts).
 // One call instead of one per feature: each blocks the frame while it starts.
+// alert/confirm/prompt become browser dialogs (ui/js_dialogs.ts) in every web frame.
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import { DOMMonitor } from '@ghostery/adblocker-content';
 
@@ -15,6 +16,71 @@ interface PageConfig {
   scripts?: string[];
   preload?: boolean;
   cosmetic?: boolean;
+}
+
+// JavaScript dialogs: Electron has no prompt() and draws alert/confirm natively. These stay
+// synchronous (the page waits, as with real dialogs) while the browser shows its own dialog.
+if (!/^(vizulla|chrome-extension|devtools|chrome):$/.test(location.protocol)) {
+  const ask = (kind: string, message: string, value: string): unknown => {
+    try {
+      return ipcRenderer.sendSync('vz:js-dialog', { kind, message, value });
+    } catch {
+      return null;
+    }
+  };
+  contextBridge.executeInMainWorld({
+    func: (ask: (kind: string, message: string, value: string) => unknown) => {
+      // Optional DOMString arguments: missing or undefined means "".
+      const text = (v: unknown) => (v === undefined ? '' : String(v));
+      const define = (name: string, fn: (...a: unknown[]) => unknown) =>
+        Object.defineProperty(window, name, { value: fn, writable: true, configurable: true, enumerable: true });
+      define('alert', function alert(message?: unknown) {
+        ask('alert', text(message), '');
+      });
+      define('confirm', function confirm(message?: unknown) {
+        return ask('confirm', text(message), '') === true;
+      });
+      define('prompt', function prompt(message?: unknown, value?: unknown) {
+        const r = ask('prompt', text(message), text(value));
+        return typeof r === 'string' ? r : null;
+      });
+    },
+    args: [ask],
+  });
+}
+
+// Installable apps (apps/web_apps.ts): Chrome's beforeinstallprompt / appinstalled events, so a
+// site's own "Install app" button works. prompt() opens the browser's install dialog.
+if (/^https?:$/.test(location.protocol) && window === window.top) {
+  const promptInstall = () => ipcRenderer.invoke('vz:install-prompt') as Promise<'accepted' | 'dismissed'>;
+  ipcRenderer.on('vz:installable', () => {
+    contextBridge.executeInMainWorld({
+      func: (prompt: () => Promise<'accepted' | 'dismissed'>) => {
+        let settle: (c: { outcome: string; platform: string }) => void = () => undefined;
+        const userChoice = new Promise<{ outcome: string; platform: string }>((r) => (settle = r));
+        let used = false;
+        const e = new Event('beforeinstallprompt', { cancelable: true });
+        Object.defineProperties(e, {
+          platforms: { value: ['web'], enumerable: true },
+          userChoice: { value: userChoice, enumerable: true },
+          prompt: {
+            value: () => {
+              if (used) return Promise.reject(new DOMException('The prompt() method can only be used once.', 'InvalidStateError'));
+              used = true;
+              return Promise.resolve(prompt()).then((outcome) => {
+                const choice = { outcome, platform: outcome === 'accepted' ? 'web' : '' };
+                settle(choice);
+                return choice;
+              });
+            },
+          },
+        });
+        window.dispatchEvent(e);
+      },
+      args: [promptInstall],
+    });
+  });
+  ipcRenderer.on('vz:appinstalled', () => contextBridge.executeInMainWorld({ func: () => void window.dispatchEvent(new Event('appinstalled')) }));
 }
 
 if (/^https?:$/.test(location.protocol)) {

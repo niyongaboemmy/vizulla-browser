@@ -220,6 +220,39 @@ export class InternalPages {
     });
 
     // ---- Task Manager (Shift+Esc)
+    // vizulla://apps: installed web apps (apps/web_apps.ts).
+    const appsData = () => ({
+      platform: process.platform,
+      apps: (a.webApps?.list() ?? []).map((x) => ({
+        id: x.id,
+        name: x.name,
+        origin: x.origin,
+        installedAt: x.installedAt,
+        icon: x.iconFile && existsSync(x.iconFile) ? `data:image/png;base64,${readFileSync(x.iconFile).toString('base64')}` : null,
+        shortcutOk: x.shortcuts.length > 0 && x.shortcuts.every((f) => existsSync(f)),
+      })),
+    });
+    const appId = (x: unknown) => v.string({ max: 16 }).parse(x, 'id');
+    this.define('apps', {
+      init: () => appsData(),
+      open: (x) => {
+        a.webApps?.launch(appId(x));
+        return null;
+      },
+      repair: (x) => {
+        a.webApps?.repairShortcuts(appId(x));
+        return appsData();
+      },
+      uninstall: async (x, ctx) => {
+        const rec = a.webApps?.get(appId(x));
+        const w = ctx.window ?? a.focused();
+        if (!rec || !w) return null;
+        const ok = await w.overlay.dialog<boolean | null>({ type: 'confirm', title: t('apps_remove_confirm', { name: rec.name }), body: t('apps_remove_body'), confirm: t('apps_remove'), danger: true });
+        if (ok) a.webApps?.uninstall(rec.id);
+        return appsData();
+      },
+    });
+
     this.define('task-manager', {
       init: () => taskRows(a),
       list: () => taskRows(a),

@@ -77,8 +77,8 @@ export const base = css`
 
 /** Styles for full vizulla:// pages in tabs. */
 export const pageStyles = css`
-  /* Frosted over the window on macOS / Windows 11 (page_base sets --vz-page-bg). */
-  :host { display: block; min-height: 100vh; background: var(--vz-page-bg, var(--vz-bg)); }
+  /* Pages are content, like any web page in a tab: solid. Glass is only the window's frame. */
+  :host { display: block; min-height: 100vh; background: var(--vz-bg); }
   .page { max-width: 920px; margin: 0 auto; padding: 40px 28px 80px; }
   /* Small windows: tighter gutters, rows wrap, nothing wider than the viewport. */
   @media (max-width: 600px) {
@@ -91,7 +91,7 @@ export const pageStyles = css`
   }
   header.page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
   header.page-head h1 { font-size: var(--vz-text-2xl); font-weight: 700; letter-spacing: -0.02em; margin: 0; flex: 1; }
-  .card { background: var(--vz-card-bg, var(--vz-bg-elev)); border: 1px solid var(--vz-border); border-radius: var(--vz-radius-l); }
+  .card { background: var(--vz-bg-elev); border: 1px solid var(--vz-border); border-radius: var(--vz-radius-l); }
   .card + .card { margin-top: 16px; }
   .card h2 { font-size: var(--vz-text-l); margin: 0 0 4px; font-weight: 650; }
   .section { padding: 18px 20px; }

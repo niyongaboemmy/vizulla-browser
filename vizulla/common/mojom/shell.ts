@@ -30,6 +30,9 @@ export const ShellInterface = defineInterface('Shell', {
   /** A tooltip that doesn't fit in the chrome: drawn above the page (ui/tip_view.ts). */
   showTip: [rect, v.string({ max: 20000 })],
   hideTip: [],
+  /** The address bar's install / open-in-app button (apps/web_apps.ts). */
+  installApp: [tabId],
+  openInApp: [tabId],
   /** Tabs dragged out of the strip: open them in a new window at the screen point. */
   detachTabs: [v.array(tabId, { max: 500 }), v.optional(point)],
   /** Tabs dragged in from another window's strip: insert at this visible index. */

@@ -50,7 +50,7 @@ export class VzSelect extends LitElement {
       :host([open]) .chev { transform: rotate(180deg); color: var(--vz-accent); }
       .list { position: absolute; left: 0; min-width: 100%; max-width: min(360px, 90vw); max-height: 300px; overflow: auto; z-index: 20; margin: 0; padding: 6px; list-style: none;
         top: calc(100% + 6px); border-radius: 18px; border: 1px solid var(--vz-glass-border);
-        background: var(--vz-glass-strong); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+        background: var(--vz-bg-elev); box-shadow: var(--vz-shadow-pop);
         transform-origin: top center; animation: drop 180ms var(--vz-ease); scrollbar-width: thin; }
       .list.above { top: auto; bottom: calc(100% + 6px); transform-origin: bottom center; }
       @keyframes drop { from { opacity: 0; transform: translateY(-4px) scale(.97); } }

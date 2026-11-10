@@ -50,6 +50,8 @@ if (!app.requestSingleInstanceLock()) {
   const pendingUrls: string[] = process.argv.slice(1).filter((a) => /^https?:\/\//.test(a));
 
   app.on('second-instance', (_e, argv) => {
+    // An installed app's shortcut: open (or focus) just that app's window.
+    if (browser?.webApps?.handleArgv(argv)) return;
     const urls = argv.filter((a) => /^https?:\/\//.test(a));
     const w = browser?.focused() ?? browser?.openWindow();
     if (!w) return;
@@ -87,6 +89,9 @@ if (!app.requestSingleInstanceLock()) {
       void runSelfTest(browser, services);
       return;
     }
+    // Started from an installed app's shortcut: only that app's window, like Chrome's app shims.
+    // The browser windows come back the next time Vizulla itself is opened.
+    if (browser.webApps?.handleArgv(process.argv)) return;
     browser.restoreOrOpen();
     const w = browser.focused();
     for (const u of pendingUrls.splice(0)) w?.loadUrl(null, u, { newTab: true });

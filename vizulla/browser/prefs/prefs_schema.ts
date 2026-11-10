@@ -11,6 +11,8 @@ export interface Prefs {
   'appearance.density': 'comfortable' | 'compact';
   'appearance.locale': 'auto' | 'en' | 'fr' | 'rw' | 'sw' | 'pseudo';
   'appearance.defaultZoom': number;
+  /** The window frame takes the visited site's colour, like mobile browsers. */
+  'appearance.siteColors': boolean;
   /** Fonts for pages that don't choose their own ('' = Chromium's default). Sites' own fonts are never replaced. */
   'fonts.standard': string;
   'fonts.serif': string;
@@ -113,6 +115,7 @@ export const DEFAULT_PREFS: Prefs = {
   'appearance.density': 'comfortable',
   'appearance.locale': 'auto',
   'appearance.defaultZoom': 1,
+  'appearance.siteColors': true,
   'fonts.standard': '',
   'fonts.serif': '',
   'fonts.sansSerif': '',
@@ -210,6 +213,7 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'appearance.density': (v) => v === 'comfortable' || v === 'compact',
   'appearance.locale': (v) => ['auto', 'en', 'fr', 'rw', 'sw', 'pseudo'].includes(v as string),
   'appearance.defaultZoom': (v) => typeof v === 'number' && v >= 0.5 && v <= 3,
+  'appearance.siteColors': (v) => typeof v === 'boolean',
   'fonts.standard': isFontName,
   'fonts.serif': isFontName,
   'fonts.sansSerif': isFontName,

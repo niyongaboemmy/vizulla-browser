@@ -35,7 +35,7 @@ const PERM_ICONS: Record<string, string> = { camera: 'eye', microphone: 'volume'
 export const permName = (k: string) => t(`perm_name_${k.replace(/-/g, '_')}` as never);
 
 interface AppMenuItem { id: string; label: string; shortcut: string; enabled: boolean; sub: boolean }
-interface AppMenu { zoom: number; update: string | null; groups: AppMenuItem[][] }
+interface AppMenu { zoom: number; theme: string | null; update: string | null; groups: AppMenuItem[][] }
 
 const TOOLS: { id: string; icon: string; label: string; web: boolean }[] = [
   { id: 'tools.screenshot', icon: 'focus', label: 'tool_screenshot', web: true },
@@ -76,7 +76,7 @@ export class VzOverlay extends LitElement {
       @keyframes rise { from { opacity: 0; transform: translateY(-6px) scale(0.985); } }
 
       .cb { position: absolute; width: min(680px, calc(100vw - 32px)); left: 50%; top: 14vh; transform: translateX(-50%);
-        background: var(--vz-glass); backdrop-filter: blur(28px) saturate(180%); border-radius: 22px; box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border);
+        background: var(--vz-bg-elev); border-radius: 22px; box-shadow: var(--vz-shadow-pop); border: 1px solid var(--vz-border);
         overflow: hidden; animation: rise 160ms var(--vz-ease); display: flex; flex-direction: column; max-height: 72vh; }
       .cb.anchored { border-radius: 20px; }
       .cb.anchored { transform: none; }
@@ -93,7 +93,7 @@ export class VzOverlay extends LitElement {
       .sec { font-size: var(--vz-text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--vz-text-3); padding: 10px 10px 4px; }
       .row { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 10px; border-radius: var(--vz-radius); cursor: pointer; }
       .row.sel { background: color-mix(in srgb, var(--vz-accent) 12%, transparent); }
-      .row .ic { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--vz-glass-strong); box-shadow: 0 0 0 1px var(--vz-border); color: var(--vz-text-2); flex: none; transition: all var(--vz-dur); }
+      .row .ic { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--vz-surface-2); box-shadow: 0 0 0 1px var(--vz-border); color: var(--vz-text-2); flex: none; transition: all var(--vz-dur); }
       .row.sel .ic { background: var(--vz-accent); color: var(--vz-on-accent); }
       .row .ic img { width: 16px; height: 16px; border-radius: 3px; }
       .row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -105,8 +105,25 @@ export class VzOverlay extends LitElement {
       .foot { display: flex; gap: 6px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--vz-border); font-size: var(--vz-text-xs); color: var(--vz-text-3); }
       .foot .grow { flex: 1; }
 
-      .dlg { position: absolute; left: 50%; top: 16vh; transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); padding: 22px 22px 18px;
-        background: var(--vz-glass-strong); backdrop-filter: blur(28px) saturate(180%); border-radius: 22px; box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border); animation: rise 160ms var(--vz-ease); max-height: 76vh; overflow: auto; }
+      /* Overlay surfaces are solid: the overlay is a separate layer over the page, so CSS blur can't
+         reach the page and "glass" would just let busy content show through behind text.
+         Dialogs: a solid card that springs in. Centred with margins, not a transform, so the
+         entrance animation never shifts it sideways. */
+      .dlg { position: absolute; left: 0; right: 0; margin: 0 auto; top: 16vh; width: min(460px, calc(100vw - 32px)); padding: 22px 22px 18px;
+        background: var(--vz-bg-elev); border-radius: 22px; border: 1px solid var(--vz-border); box-shadow: var(--vz-shadow-pop);
+        animation: dlg-in 300ms cubic-bezier(.2,.9,.3,1.15); max-height: 76vh; overflow: auto; transform-origin: top center; }
+      @keyframes dlg-in { from { opacity: 0; transform: translateY(10px) scale(.96); } }
+      .dlg .actions .btn { height: 36px; min-width: 88px; }
+      /* A page's own dialog drops from the top of the page, like Chrome's. */
+      .dlg.page { top: 92px; width: min(440px, calc(100vw - 32px)); }
+      .js-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .js-site { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; background: var(--vz-surface-2); color: var(--vz-text-2); overflow: hidden; }
+      .js-site img { width: 18px; height: 18px; border-radius: 4px; }
+      .dlg h2.js-who { margin: 0; font-size: 14px; font-weight: 650; color: var(--vz-text-2); letter-spacing: 0; overflow-wrap: anywhere; }
+      .js-msg { font-size: 15px; line-height: 1.5; color: var(--vz-text); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; user-select: text; margin: 2px 0 4px; }
+      .js-msg:focus-visible { outline: 2px solid var(--vz-focus); outline-offset: 4px; border-radius: 6px; }
+      .js-input { width: 100%; height: 40px; margin-top: 12px; font-size: 15px; }
+      .js-suppress { margin-top: 14px; }
       .dlg.wide { width: min(620px, calc(100vw - 32px)); }
       .dlg h2 { margin: 0 0 6px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
       .dlg p { margin: 0 0 14px; line-height: 1.5; }
@@ -126,7 +143,7 @@ export class VzOverlay extends LitElement {
       .perm-head { display: flex; gap: 14px; align-items: flex-start; }
       .perm-head > .vz-icon { margin-top: 2px; color: var(--vz-accent); }
 
-      .pop { position: absolute; width: 300px; padding: 16px; background: var(--vz-glass-strong); backdrop-filter: blur(28px) saturate(180%); border-radius: 20px; box-shadow: var(--vz-glass-shadow); border: 1px solid var(--vz-glass-border); animation: rise 140ms var(--vz-ease); }
+      .pop { position: absolute; width: 300px; padding: 16px; background: var(--vz-bg-elev); border-radius: 20px; box-shadow: var(--vz-shadow-pop); border: 1px solid var(--vz-border); animation: rise 140ms var(--vz-ease); }
       .pop h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
       .pop .site { color: var(--vz-text-2); font-size: var(--vz-text-s); margin: 2px 0 14px; }
       .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -141,6 +158,36 @@ export class VzOverlay extends LitElement {
       .lock-hero { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 8px 4px 4px; }
       .lock-hero h2 { margin: 6px 0 0; }
       .lock-orb { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(160deg, #3b82f6, #172554); }
+      /* Installing a web app. */
+      .ai-hero { display: flex; gap: 14px; align-items: center; }
+      .ai-tile { position: relative; width: 64px; height: 64px; flex: none; display: grid; place-items: center; border-radius: 16px; background: var(--vz-surface-2); animation: ai-pop 520ms cubic-bezier(.34,1.56,.64,1); }
+      .ai-tile.big { width: 84px; height: 84px; border-radius: 22px; }
+      @keyframes ai-pop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); } }
+      .ai-img { width: 78%; height: 78%; object-fit: contain; border-radius: 12px; }
+      .ai-letter { width: 100%; height: 100%; border-radius: inherit; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 30px; font-weight: 750; }
+      .ai-id { flex: 1; min-width: 0; }
+      .ai-id h2 { margin: 0 0 6px; font-size: 13px; font-weight: 650; color: var(--vz-text-2); }
+      .ai-name { width: 100%; height: 36px; font-size: 16px; font-weight: 650; padding: 4px 12px; }
+      .ai-origin { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: var(--vz-text-s); }
+      .ai-desc { margin: 12px 0 0 !important; font-size: var(--vz-text-s); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .ai-tabs { margin: 14px 0 10px; }
+      .ai-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+      .ai-points { list-style: none; margin: 4px 0 14px; padding: 0; display: grid; gap: 10px; }
+      .ai-points li { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; line-height: 1.4; }
+      .ai-points .vz-icon { flex: none; margin-top: 1px; color: var(--vz-accent); }
+      .ai-points li { animation: ai-in 360ms var(--vz-ease) backwards; }
+      .ai-points li:nth-child(2) { animation-delay: 50ms; } .ai-points li:nth-child(3) { animation-delay: 100ms; } .ai-points li:nth-child(4) { animation-delay: 150ms; }
+      @keyframes ai-in { from { opacity: 0; transform: translateY(4px); } }
+      .ai-phone { display: flex; gap: 16px; align-items: center; }
+      .ai-qr { width: 150px; height: 150px; flex: none; padding: 8px; border-radius: 14px; }
+      .ai-steps { margin: 0; padding-left: 18px; display: grid; gap: 12px; font-size: 13px; line-height: 1.45; }
+      .ai-steps b { display: block; margin-bottom: 2px; }
+      .ai-steps span { color: var(--vz-text-2); }
+      .ai-note { margin: 12px 0 0 !important; font-size: var(--vz-text-s); }
+      .ai-done { display: grid; justify-items: center; text-align: center; gap: 6px; padding-top: 6px; }
+      .ai-done h2 { margin: 10px 0 0; }
+      .ai-done p { margin: 0 !important; }
+      .ai-check { position: absolute; right: -6px; bottom: -6px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--vz-ok); color: #fff; box-shadow: 0 0 0 3px var(--vz-bg-elev); animation: ai-pop 520ms 220ms cubic-bezier(.34,1.56,.64,1) backwards; }
       .qr-hero { display: grid; justify-items: center; gap: 12px; text-align: center; }
       .qr-hero h2 { margin: 0; }
       .qr-code { width: 220px; height: 220px; padding: 10px; border-radius: 18px; background: #fff; }
@@ -224,6 +271,10 @@ export class VzOverlay extends LitElement {
       .zoom-row .icon-btn { width: 28px; height: 28px; border-radius: 50%; }
       .zoom-row .pct { all: unset; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; font-size: 12.5px; border-radius: 8px; padding: 4px 2px; cursor: default; }
       .zoom-row .pct:hover, .zoom-row .pct:focus-visible { background: var(--vz-surface-hover); }
+      .theme-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--vz-surface-2); }
+      .theme-seg button { width: 30px; height: 26px; border: 0; padding: 0; border-radius: 999px; display: grid; place-items: center; background: transparent; color: var(--vz-text-2); cursor: pointer; transition: background var(--vz-dur), color var(--vz-dur); }
+      .theme-seg button:hover { color: var(--vz-text); }
+      .theme-seg button[aria-checked='true'] { background: var(--vz-bg-elev); color: var(--vz-accent); box-shadow: 0 0 0 1px var(--vz-border), 0 1px 3px rgba(15, 23, 42, .12); }
       .ads { width: 330px; }
       .ads .stat { display: grid; justify-items: center; gap: 2px; }
       .ads .stat span { font-size: 10.5px; color: var(--vz-text-3); }
@@ -507,7 +558,12 @@ export class VzOverlay extends LitElement {
             <button role="menuitem" class="pct" aria-label=${t('cmd_zoom_reset')} @click=${() => void run('view.zoomReset')}>${m.zoom}%</button>
             <button role="menuitem" class="icon-btn" aria-label=${t('cmd_zoom_in')} @click=${() => void run('view.zoomIn')}>${icon('plus', 14)}</button>
             <button role="menuitem" class="icon-btn" aria-label=${t('cmd_fullscreen')} @click=${() => void run('view.fullscreen')}>${icon('maximize', 14)}</button>
-          </div><div class="sep"></div>` : nothing}
+          </div>
+          ${m.theme ? html`<div class="zoom-row theme-row" role="radiogroup" aria-label=${t('set_theme')}>
+            <span>${t('set_theme')}</span><span class="grow"></span>
+            <div class="theme-seg">${(['system', 'light', 'dark'] as const).map((id) => html`<button role="menuitemradio" aria-checked=${m.theme === id} title=${t(`theme_${id}`)}
+              aria-label=${t(`theme_${id}`)} @click=${() => void run(`theme:${id}`)}>${icon(id === 'system' ? 'monitor' : id === 'light' ? 'sun' : 'moon', 14)}</button>`)}</div>
+          </div>` : nothing}<div class="sep"></div>` : nothing}
           ${g.map((x) => html`<button role="menuitem" class="mi" ?disabled=${!x.enabled} aria-haspopup=${x.sub ? 'menu' : nothing} @click=${() => void run(x.id)}>
             <span>${x.label}</span><span class="grow"></span>${x.shortcut ? html`<span class="kbd">${x.shortcut}</span>` : nothing}${x.sub ? icon('chevron-right', 14) : nothing}</button>`)}
           ${gi < m.groups.length - 1 ? html`<div class="sep"></div>` : nothing}`)}
@@ -578,9 +634,11 @@ export class VzOverlay extends LitElement {
       draft: this.draft,
     };
     const wide = ['agent-plan', 'agent-confirm', 'disclosure', 'display-picker'].includes(s.dialog.type);
+    // A page's alert/confirm/prompt speaks for the page, so it isn't labelled as the browser's.
+    const page = s.dialog.type === 'js-dialog';
     return html`<div class="backdrop"></div>
-      <div class="dlg ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
-        <div class="browser-owned">${icon('shield', 12)} ${t('browser_owned_label')}</div>
+      <div class="dlg ${wide ? 'wide' : ''} ${page ? 'page' : ''}" role=${page && s.dialog.kind !== 'prompt' ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby="dlg-title" aria-describedby=${page ? 'js-msg' : nothing}>
+        ${page ? nothing : html`<div class="browser-owned">${icon('shield', 12)} ${t('browser_owned_label')}</div>`}
         ${render ? render(s.dialog, host) : html`<p>${s.dialog.type}</p>`}
       </div>`;
   }

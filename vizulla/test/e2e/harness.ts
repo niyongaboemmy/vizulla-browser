@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { deflateSync } from 'node:zlib';
 
 export const ROOT = resolve(__dirname, '../../..');
 
@@ -61,8 +62,44 @@ const PAGES: Record<string, string> = {
   '/pop': `<!doctype html><title>Popup test</title><button id="go">Go</button><script>
     document.getElementById('go').onclick = () => window.open('/article', '_blank');
     window.openLater = () => setTimeout(() => window.open('/article', '_blank'), 50);</script>`,
+  '/brand': '<!doctype html><title>Brand</title><meta name="theme-color" content="#1a73e8"><h1>Brand</h1>',
+  '/painted': '<!doctype html><title>Painted</title><style>body{background:#0f766e;color:#fff}</style><h1>Painted</h1>',
+  '/dialogs': `<!doctype html><title>Dialogs</title><h1>Dialogs</h1><iframe id="f" width="300" height="80"></iframe>`,
+  '/pwa': `<!doctype html><title>Vizulla Test App</title><link rel="manifest" href="/manifest.webmanifest"><h1>Test app</h1><script>
+    window.__bip = null; addEventListener('beforeinstallprompt', (e) => { window.__bip = e; }); addEventListener('appinstalled', () => { window.__installed = true; });</script>`,
+  '/manifest.webmanifest': JSON.stringify({ name: 'Vizulla Test App', short_name: 'Test App', start_url: '/pwa', scope: '/', display: 'standalone', theme_color: '#0ea5e9', background_color: '#ffffff', icons: [{ src: '/icon.png', sizes: '192x192', type: 'image/png' }] }),
   '/pdf': '',
 };
+
+/** A solid-colour PNG (the test app's icon). */
+function solidPng(size: number, [r, g, b]: number[]): Buffer {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (buf: Buffer) => {
+    let c = 0xffffffff;
+    for (const x of buf) c = crcTable[(c ^ x) & 0xff]! ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4);
+    c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, Buffer.from([r!, g!, b!]))]);
+  const raw = Buffer.concat(Array.from({ length: size }, () => row));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 
 export async function startServer(): Promise<{ server: Server; base: string }> {
   const server = createServer((req, res) => {
@@ -70,6 +107,11 @@ export async function startServer(): Promise<{ server: Server; base: string }> {
     if (path === '/sample.pdf') {
       res.writeHead(200, { 'content-type': 'application/pdf' });
       res.end(readFileSync(join(ROOT, 'vizulla/test/data/sample.pdf')));
+      return;
+    }
+    if (path === '/icon.png') {
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(solidPng(192, [14, 165, 233]));
       return;
     }
     if (path === '/echo-headers') {

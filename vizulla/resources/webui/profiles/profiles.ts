@@ -30,8 +30,8 @@ class VzProfiles extends VzPage<Data> {
       .wrap { max-width: 860px; margin: 0 auto; padding: 9vh 20px 60px; text-align: center; }
       h1 { font-size: 30px; letter-spacing: -0.02em; margin: 18px 0 6px; }
       .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 34px; }
-      .card-p { position: relative; width: 168px; padding: 22px 12px 16px; border-radius: 26px; border: 1px solid var(--vz-glass-border);
-        background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(170%); display: flex; flex-direction: column; align-items: center; gap: 12px;
+      .card-p { position: relative; width: 168px; padding: 22px 12px 16px; border-radius: 26px; border: 1px solid var(--vz-border);
+        background: var(--vz-bg-elev); display: flex; flex-direction: column; align-items: center; gap: 12px;
         animation: vz-rise 380ms var(--vz-ease) both; transition: transform var(--vz-dur) var(--vz-ease), border-color var(--vz-dur); }
       .card-p:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--vz-accent) 40%, transparent); }
       .card-p .open { all: unset; position: absolute; inset: 0; border-radius: 26px; cursor: pointer; }
@@ -45,8 +45,8 @@ class VzProfiles extends VzPage<Data> {
       .card-p:hover .tools, .card-p:focus-within .tools { opacity: 1; }
       .add-card { border-style: dashed; color: var(--vz-text-2); }
       .add-card .avatar { background: var(--vz-surface-2); color: var(--vz-accent); }
-      .editor { max-width: 420px; margin: 28px auto 0; text-align: left; padding: 22px; border-radius: 26px; border: 1px solid var(--vz-glass-border);
-        background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(170%); animation: vz-rise 300ms var(--vz-ease); display: grid; gap: 14px; }
+      .editor { max-width: 420px; margin: 28px auto 0; text-align: left; padding: 22px; border-radius: 26px; border: 1px solid var(--vz-border);
+        background: var(--vz-bg-elev); animation: vz-rise 300ms var(--vz-ease); display: grid; gap: 14px; }
       .editor .preview { display: flex; align-items: center; gap: 14px; }
       .editor label { display: grid; gap: 6px; font-size: var(--vz-text-s); font-weight: 600; color: var(--vz-text-2); }
       .swatches { display: flex; gap: 8px; flex-wrap: wrap; }

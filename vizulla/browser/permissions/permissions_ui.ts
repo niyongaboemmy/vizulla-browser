@@ -10,6 +10,9 @@ export function permissionsUi(app: BrowserApp): PermissionsUi {
   return {
     async prompt({ wc, origin, embeddedIn, kinds, detail }) {
       const w = windowOf(wc);
+      // An installed app's window asks in its own overlay.
+      const appOverlay = w ? null : app.dialogHost(wc)?.overlay;
+      if (appOverlay) return (await appOverlay.dialog<{ answer: PromptAnswer } | null>({ type: 'permission', origin: displayUrl(origin), embeddedIn: embeddedIn ? displayUrl(embeddedIn) : null, kinds, detail: detail ?? null }))?.answer ?? 'dismiss';
       if (!w) return 'dismiss';
       // A background tab can't interrupt: it waits until it's the one being looked at.
       const tab = app.findTabByWebContents(wc)?.tab;

@@ -110,6 +110,8 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'tools.techStack', title: 'tool_tech', category: 'tools', keywords: 'technologies tech stack built with framework wappalyzer builtwith detect cms what is this site made with' },
   { id: 'tools.clearSiteData', title: 'tool_clear_site', category: 'tools', destructive: true, keywords: 'clear site data cookies storage reset site effacer données du site' },
   { id: 'window.closePrivate', title: 'cmd_close_private', category: 'window', keywords: 'close private incognito windows' },
+  { id: 'page.apps', title: 'cmd_apps', category: 'pages', keywords: 'apps installed web apps pwa progressive applications applications installées programu porogaramu' },
+  { id: 'app.install', title: 'cmd_app_install', category: 'tools', keywords: 'install app pwa add to desktop dock start menu home screen installer programu shyiramo' },
   { id: 'page.taskManager', title: 'cmd_task_manager', category: 'pages', accelerator: 'Shift+Escape', keywords: 'task manager memory cpu slow performance process heavy' },
   { id: 'page.extensions', title: 'cmd_extensions', category: 'pages', keywords: 'extensions add-ons addons plugins chrome web store puzzle install' },
   { id: 'page.history', title: 'cmd_history', category: 'pages', accelerator: 'CmdOrCtrl+Y' },

@@ -6,7 +6,8 @@ import { base } from '../shared/styles';
 import { icon } from '../shared/icons';
 import { client, on } from '../shared/bridge';
 import { installTooltips, setTooltipAvoid } from '../shared/tooltip';
-import { applyLocale, applyTheme } from '../shared/theme';
+import { applyLocale, applyTheme, resolveTheme } from '../shared/theme';
+import { inkFor, neutralFrame } from '@vz/common/color';
 import { ShellInterface } from '@vz/common/mojom/shell';
 import { t } from '@vz/common/i18n';
 import type { TabInfo, WindowState } from '@vz/common/types';
@@ -28,6 +29,7 @@ const TINY = 600;
 export class VzShell extends LitElement {
   static override properties = { state: { state: true }, findOpen: { state: true }, findResult: { state: true }, resizing: { state: true }, vw: { state: true } };
   state: WindowState | null = null;
+  private shineTimer = 0;
   findOpen = false;
   findResult: { active: number; total: number } | null = null;
   resizing: 'sidebar' | 'panel' | null = null;
@@ -40,8 +42,28 @@ export class VzShell extends LitElement {
   static override styles = [
     base,
     css`
-      /* One surface: tabs, toolbar, sidebar and panels sit on the same glass, with no lines between them. */
-      :host { display: grid; height: 100vh; overflow: hidden; user-select: none; background-color: var(--vz-chrome-bg, var(--vz-toolbar)); background-image: var(--vz-glass-sheen, none); }
+      /* One solid frame, like mobile browsers: the visited site's colour (else white in light theme,
+         black in dark), with a soft glass sheen on top and no lines between its parts. Colour changes
+         glide. Everything in the frame is drawn in one "ink" that reads on that colour. */
+      :host { display: grid; height: 100vh; overflow: hidden; user-select: none; position: relative; isolation: isolate;
+        background-color: var(--fr-bg, var(--vz-toolbar));
+        background-image: linear-gradient(180deg, color-mix(in srgb, #fff 5%, transparent), transparent 50%);
+        transition: background-color 450ms var(--vz-ease); }
+      :host([framed]) vz-tabstrip, :host([framed]) vz-toolbar, :host([framed]) vz-sidebar, :host([framed]) vz-tab-rail, :host([framed]) .strip, :host([framed]) .bookmarks {
+        --vz-text: var(--fr-text); --vz-text-2: var(--fr-text-2); --vz-text-3: var(--fr-text-3);
+        --vz-border: var(--fr-line); --vz-border-strong: var(--fr-line-strong);
+        --vz-surface-2: var(--fr-wash-1); --vz-surface-hover: var(--fr-wash-2); --vz-surface-active: var(--fr-wash-3); --vz-tab-hover: var(--fr-wash-2);
+        --vz-omnibox: var(--fr-wash-2); --vz-omnibox-bg: var(--fr-wash-2); --vz-omnibox-hover: var(--fr-wash-3);
+        --vz-toolbar: var(--fr-raised); --vz-bg-elev: var(--fr-raised);
+        color: var(--fr-text); transition: color 300ms var(--vz-ease); }
+      /* On a site's colour the frame is monochrome (blue accents would vanish on a blue site). */
+      :host([tinted]) vz-tabstrip, :host([tinted]) vz-toolbar, :host([tinted]) vz-sidebar, :host([tinted]) vz-tab-rail, :host([tinted]) .strip, :host([tinted]) .bookmarks {
+        --vz-accent: var(--fr-text); --vz-accent-soft: var(--fr-wash-3); --vz-on-accent: var(--fr-bg); --vz-space-ink: var(--fr-text); }
+      /* The light sweep as the window comes forward. */
+      :host::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0;
+        background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, var(--fr-text, #fff) 9%, transparent) 50%, transparent 65%) no-repeat; background-size: 260% 100%; background-position: 130% 0; }
+      :host([shine])::after { animation: glass-sweep 1.3s cubic-bezier(.3,.6,.2,1); }
+      @keyframes glass-sweep { 0% { opacity: 0; background-position: 130% 0; } 15% { opacity: 1; } 100% { opacity: 0; background-position: -30% 0; } }
       :host([layout='vertical']) { grid-template-columns: auto 1fr auto; }
       :host([layout='horizontal']) { grid-template-rows: auto auto auto 1fr; grid-template-columns: 1fr auto; }
       :host([layout='horizontal']) vz-tabstrip, :host([layout='horizontal']) vz-toolbar, :host([layout='horizontal']) .bookmarks { grid-column: 1 / -1; }
@@ -52,23 +74,25 @@ export class VzShell extends LitElement {
       :host([layout='horizontal']) .main, :host([layout='horizontal']) .panel-host { grid-row: 4; }
       .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
       /* The page gets every pixel: no inset, no rounded frame. */
-      .frame-wrap { flex: 1; display: flex; gap: 2px; min-height: 0; background: var(--vz-border); }
+      /* No lines: the page meets the frame directly; split views are separated by a gap of frame colour. */
+      .frame-wrap { flex: 1; display: flex; gap: 2px; min-height: 0; }
       .frame { flex: 1; min-width: 0; background: transparent; position: relative; }
       .frame.split-active { box-shadow: inset 0 2px 0 var(--vz-accent); }
       .strip {
         display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 8px 0 14px; flex: none;
-        background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: 0 1px 0 var(--vz-border); animation: slide 180ms var(--vz-ease);
+        animation: slide 180ms var(--vz-ease);
       }
       @keyframes slide { from { opacity: 0; transform: translateY(-6px); } }
       .strip input { flex: 1; min-width: 0; min-height: 0; max-width: 420px; height: 28px; border-radius: 999px; padding: 0 12px; background: var(--vz-omnibox); border-color: transparent; }
       .strip .count { font-size: var(--vz-text-s); color: var(--vz-text-2); min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
       .strip .grow { flex: 1; }
-      .agent-bar { background: linear-gradient(90deg, color-mix(in srgb, var(--vz-accent) 16%, var(--vz-toolbar)), var(--vz-glass-strong)); }
+      .agent-bar { background: linear-gradient(90deg, color-mix(in srgb, var(--vz-accent) 14%, transparent), transparent 70%); }
       .agent-bar .label { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .agent-bar .step { font-variant-numeric: tabular-nums; color: var(--vz-text-2); font-weight: 600; font-size: 12px; }
       .agent-bar .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--vz-accent); animation: pulse 1.4s ease-in-out infinite; flex: none; }
       @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
-      .panel-host { display: flex; }
+      /* Side panels hold content (the assistant, notes): a solid surface in the theme's colours. */
+      .panel-host { display: flex; background: var(--vz-bg-elev); color: var(--vz-text); }
       .resize { width: 6px; cursor: col-resize; position: relative; z-index: 2; margin: 0 -3px; }
       .resize::after { content: ''; position: absolute; inset: 30% 3px; border-radius: 2px; background: transparent; transition: background var(--vz-dur); }
       .resize:hover::after, .resize.active::after { background: var(--vz-border-strong); }
@@ -111,24 +135,53 @@ export class VzShell extends LitElement {
       this.lastLocale = s.locale;
     }
     applyTheme(s.theme, s.accent, s.density);
-    // Glass (macOS vibrancy, Windows Mica): the whole chrome is one light tint over the blurred
-    // desktop, like iOS materials; a hairline highlight marks the glass edge.
-    if (s.glass) {
-      const root = document.documentElement.style;
-      root.setProperty('--vz-chrome-bg', 'color-mix(in srgb, var(--vz-toolbar) 46%, transparent)');
-      root.setProperty('--vz-glass-edge', 'inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent)');
-      // Light catching the top of the glass, and a field you can see the glass through.
-      root.setProperty('--vz-glass-sheen', 'linear-gradient(180deg, color-mix(in srgb, #fff 12%, transparent), transparent 70%)');
-      root.setProperty('--vz-omnibox-bg', 'color-mix(in srgb, var(--vz-omnibox) 72%, transparent)');
-    } else {
-      const root = document.documentElement.style;
-      for (const k of ['--vz-chrome-bg', '--vz-glass-edge', '--vz-glass-sheen', '--vz-omnibox-bg']) root.removeProperty(k);
+    this.paintFrame(s);
+    // Coming to the front, a soft light sweeps across the frame once.
+    const wasActive = this.state?.active;
+    if (s.active && wasActive !== true) {
+      this.removeAttribute('shine');
+      void this.offsetWidth;
+      this.setAttribute('shine', '');
+      clearTimeout(this.shineTimer);
+      this.shineTimer = window.setTimeout(() => this.removeAttribute('shine'), 1400);
     }
     this.state = s;
     this.setAttribute('layout', s.layout);
     this.setAttribute('sidebar', s.sidebarCollapsed ? 'collapsed' : 'open');
     this.toggleAttribute('classic', s.classic);
     this.toggleAttribute('fullscreen', s.fullscreen);
+  }
+
+  /**
+   * The frame's colour and ink: the site's colour (like mobile browsers), else white in light theme
+   * and black in dark. High contrast keeps its own tokens.
+   */
+  private paintFrame(s: WindowState): void {
+    const theme = resolveTheme(s.platform.endsWith(':private') ? 'dark' : s.theme);
+    const framed = theme !== 'high-contrast';
+    this.toggleAttribute('framed', framed);
+    this.toggleAttribute('tinted', framed && !!s.chromeColor);
+    if (!framed) {
+      for (const k of ['--fr-bg', '--fr-text']) this.style.removeProperty(k);
+      return;
+    }
+    const bg = s.chromeColor ?? neutralFrame(theme);
+    const ink = inkFor(bg) === 'dark' ? '#0f172a' : '#f5f7fa';
+    const mix = (pct: number) => `color-mix(in srgb, ${ink} ${pct}%, transparent)`;
+    const vars: Record<string, string> = {
+      '--fr-bg': bg,
+      '--fr-text': ink,
+      '--fr-text-2': `color-mix(in srgb, ${ink} 76%, ${bg})`,
+      '--fr-text-3': `color-mix(in srgb, ${ink} 62%, ${bg})`,
+      '--fr-line': mix(12),
+      '--fr-line-strong': mix(22),
+      '--fr-wash-1': mix(5),
+      '--fr-wash-2': mix(8),
+      '--fr-wash-3': mix(13),
+      // A raised surface on the frame (focused address field, toasts): solid, in the ink's family.
+      '--fr-raised': inkFor(bg) === 'dark' ? '#ffffff' : '#1c1d21',
+    };
+    for (const [k, v] of Object.entries(vars)) this.style.setProperty(k, v);
   }
 
   get activeTab(): TabInfo | undefined {

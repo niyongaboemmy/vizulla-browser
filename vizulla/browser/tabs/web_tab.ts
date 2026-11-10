@@ -4,7 +4,7 @@ import { WebContentsView, type Session, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { displayUrl, securityStateOf } from '@vz/common/url';
 import type { NavState } from '../spaces/spaces_service';
-import { hasGlass } from '../ui/glass';
+import { frameColor } from '@vz/common/color';
 
 let nextTabId = 1;
 
@@ -42,6 +42,9 @@ export class WebTab extends EventEmitter {
   url: string;
   title: string;
   favicon: string | null;
+  /** The site's colour for the window frame, like mobile browsers: its theme-color, else its page background. */
+  pageColor: string | null = null;
+  private themeColor: string | null = null;
   loading = false;
   audible = false;
   muted = false;
@@ -65,6 +68,25 @@ export class WebTab extends EventEmitter {
     this.nav = opts.nav ?? null;
     if (opts.adoptView) this.attach(opts.adoptView);
     else if (!opts.discarded) this.ensureLive();
+  }
+
+  private setPageColor(c: string | null): void {
+    if (c === this.pageColor) return;
+    this.pageColor = c;
+    this.emit('updated');
+  }
+
+  private async samplePageColor(): Promise<void> {
+    const wc = this.wc;
+    if (!wc || this.themeColor || !/^https?:/.test(wc.getURL())) return;
+    try {
+      const css = (await wc.executeJavaScriptInIsolatedWorld(1_002_004, [
+        { code: `(() => { for (const el of [document.body, document.documentElement]) { if (!el) continue; const c = getComputedStyle(el).backgroundColor; if (c && c !== 'transparent' && !/^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(c)) return c; } return null; })()` },
+      ])) as string | null;
+      if (!this.themeColor && this.wc === wc) this.setPageColor(frameColor(css));
+    } catch {
+      /* navigating away */
+    }
   }
 
   /** Re-targets window.open when the tab moves to another window. */
@@ -98,6 +120,9 @@ export class WebTab extends EventEmitter {
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
+        // Run the session's preloads in iframes too (dialogs, fingerprinting protection, Shields
+        // scriptlets and element hiding). Sandboxed and isolated: frames still get no Node or IPC.
+        nodeIntegrationInSubFrames: true,
         webSecurity: true,
         // Internal pages get the WebUI bridge; the preload exposes nothing on web origins.
         preload: agent ? undefined : preload,
@@ -200,16 +225,29 @@ export class WebTab extends EventEmitter {
       }
     });
     wc.on('did-navigate', (_e, url, httpResponseCode) => {
-      // Vizulla's own pages are frosted glass over the window; websites keep white.
-      if (hasGlass) view.setBackgroundColor(url.startsWith('vizulla:') ? '#00000000' : '#ffffff');
+      // Vizulla's pages paint their own (theme) background; until then the window's shows, not a white flash.
+      view.setBackgroundColor(url.startsWith('vizulla:') ? '#00000000' : '#ffffff');
       this.url = url;
+      // A new document: its colour comes from its own theme-color or background.
+      this.themeColor = null;
+      this.setPageColor(null);
       this.isPdf = false;
       this.favicon = null;
       this.emit('navigated', url, httpResponseCode);
       upd();
     });
+    // The site's colour: theme-color when it declares one (Chromium resolves light/dark variants),
+    // else the page's own background, sampled when it's ready and after in-page navigations.
+    wc.on('did-change-theme-color', (_e, color) => {
+      this.themeColor = frameColor(color);
+      this.setPageColor(this.themeColor);
+      if (!this.themeColor) void this.samplePageColor();
+    });
+    wc.on('dom-ready', () => void this.samplePageColor());
+    wc.on('did-finish-load', () => void this.samplePageColor());
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
       if (!isMainFrame) return;
+      void this.samplePageColor();
       this.url = url;
       this.emit('navigated-in-page', url);
       upd();

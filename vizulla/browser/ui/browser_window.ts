@@ -22,7 +22,8 @@ import { t } from '@vz/common/i18n';
 import type { PanelKind, Rect, SpaceColor, SpaceIcon, TabInfo, ToastInfo, WindowState } from '@vz/common/types';
 import { kVizullaAutoArchive } from '../vizulla_features';
 
-import { hasGlass, hasMica, isMac } from './glass';
+import { isMac } from './glass';
+import { inkFor, neutralFrame } from '@vz/common/color';
 
 export interface CreateTabOptions {
   url?: string;
@@ -88,15 +89,22 @@ export class BrowserWindowController extends EventEmitter {
       minHeight: 360,
       show: false,
       title: profile.isPrivate ? 'Vizulla — Private' : 'Vizulla',
-      // macOS: transparent, so the window's vibrancy (frosted glass) shows through the translucent chrome.
-      // 'under-window' is the most see-through material (the desktop shows, heavily blurred), like iOS glass;
-      // with Reduce Transparency on, macOS draws it solid by itself.
-      // Windows 11: the same with Mica. Older Windows and Linux keep a solid frame.
-      backgroundColor: hasGlass ? '#00000000' : windowBackground(this.resolvedTheme()),
+      // The frame is solid, coloured like the visited site (shell.ts), the same on every OS: no
+      // see-through OS material (it made text hard to read over busy wallpapers).
+      backgroundColor: windowBackground(this.resolvedTheme()),
       ...(isMac
-        ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'under-window', visualEffectState: 'followWindow' }
-        : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#eef1f6' : '#0f172a', height: 40 }, ...(hasMica ? { backgroundMaterial: 'mica' } : {}) }),
+        ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 } }
+        : { titleBarStyle: 'hidden', titleBarOverlay: this.titleBarOverlay() }),
     } as Electron.BaseWindowConstructorOptions);
+    // The theme changed (Settings, or the computer's appearance while following it): solid frames
+    // and Windows/Linux caption buttons follow, so nothing is left in the old colours.
+    const onTheme = () => {
+      if (this.destroyed) return;
+      this.win.setBackgroundColor(windowBackground(this.resolvedTheme()));
+      this.updateCaptionButtons();
+    };
+    nativeTheme.on('updated', onTheme);
+    this.win.once('closed', () => nativeTheme.off('updated', onTheme));
     this.chrome = new WebContentsView({
       webPreferences: {
         session: app.chromeSession,
@@ -131,7 +139,11 @@ export class BrowserWindowController extends EventEmitter {
       this.scheduleSave();
     });
     this.win.on('move', () => this.scheduleSave());
-    this.win.on('focus', () => this.app.setLastFocused(this));
+    this.win.on('focus', () => {
+      this.app.setLastFocused(this);
+      this.pushState();
+    });
+    this.win.on('blur', () => this.pushState());
     this.win.on('enter-full-screen', () => this.pushState());
     this.win.on('leave-full-screen', () => this.pushState());
     this.win.on('close', () => this.onClose());
@@ -702,10 +714,14 @@ export class BrowserWindowController extends EventEmitter {
       aiMode: prefs.get('ai.mode'),
       features: this.profile.features.snapshot(),
       update: this.app.updates.info(),
-      glass: hasGlass && this.profile.prefs.get('appearance.theme') !== 'high-contrast',
+      glass: false,
+      // The frame takes the site's colour (like mobile browsers), except in private windows and high contrast.
+      chromeColor: this.profile.isPrivate || this.resolvedTheme() === 'high-contrast' || !prefs.get('appearance.siteColors') ? null : (this.activeTab()?.pageColor ?? null),
+      active: this.win.isFocused(),
       extensions: this.profile.isPrivate ? { pinned: [], count: 0, activeWcId: null } : { ...this.app.extensions.toolbar(), activeWcId: this.activeTab()?.wc?.id ?? null },
       profile: { ...pick(this.app.profiles.current()), count: this.app.profiles.list().length },
       fullscreen: this.win.isFullScreen() || this.htmlFullscreen,
+      install: this.profile.isPrivate ? null : (this.app.webApps?.stateFor(this.activeTab()?.wc) ?? null),
       bookmarks: prefs.get('tabs.classic') ? this.profile.history.bookmarks().slice(0, 30).map((b) => ({ url: b.url, title: b.title })) : [],
     };
   }
@@ -732,6 +748,7 @@ export class BrowserWindowController extends EventEmitter {
     const state = this.state();
     const json = JSON.stringify(state);
     if (json === this.lastState) return;
+    this.updateCaptionButtons();
     this.lastState = json;
     emitTo(this.chrome.webContents, 'Shell', 'state', state);
     // The OS window title follows the active tab (Window menu, Mission Control, taskbar).
@@ -777,9 +794,26 @@ export class BrowserWindowController extends EventEmitter {
     this.profile.spaces.saveWindow(this.sessionSnapshot());
   }
 
+  /** Windows/Linux caption buttons: the ink that reads on the frame's current colour. */
+  private titleBarOverlay(): Electron.TitleBarOverlay {
+    const theme = this.resolvedTheme();
+    const frame = (theme !== 'high-contrast' && !this.profile.isPrivate && this.profile.prefs.get('appearance.siteColors') && this.activeTab()?.pageColor) || neutralFrame(theme);
+    return { color: '#00000000', symbolColor: inkFor(frame) === 'dark' ? '#0f172a' : '#eef1f6', height: 40 };
+  }
+
+  private lastCaption = '';
+  private updateCaptionButtons(): void {
+    if (isMac) return;
+    const o = this.titleBarOverlay();
+    if (o.symbolColor === this.lastCaption) return;
+    this.lastCaption = o.symbolColor!;
+    (this.win as unknown as { setTitleBarOverlay?: (x: Electron.TitleBarOverlayOptions) => void }).setTitleBarOverlay?.(o);
+  }
+
   resolvedTheme(): 'light' | 'dark' | 'high-contrast' {
     const pref = this.profile.prefs.get('appearance.theme');
     if (pref === 'high-contrast' || nativeTheme.shouldUseHighContrastColors) return 'high-contrast';
+    if (this.profile.isPrivate) return 'dark';
     if (pref === 'light' || pref === 'dark') return pref;
     return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
   }

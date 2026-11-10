@@ -32,6 +32,165 @@ registerDialog('confirm', (d, host) => html`
     <button class="btn primary ${d.danger ? 'danger' : ''}" autofocus @click=${() => host.resolve(true)}>${d.confirm ?? t('action_ok')}</button>
   </div>`);
 
+// A page's alert(), confirm() or prompt() (browser/ui/js_dialogs.ts). Enter answers OK,
+// Escape cancels; from the page's second dialog on, the user can silence it.
+registerDialog('js-dialog', (d, host) => {
+  const draft = host.draft as { value?: string; suppress?: boolean };
+  draft.value ??= String(d.value ?? '');
+  const kind = String(d.kind);
+  const origin = String(d.origin ?? '');
+  const who = origin ? t(d.embedded ? 'js_embedded_says' : 'js_says', { origin }) : t('js_page_says');
+  const message = String(d.message ?? '');
+  const ok = () => host.resolve({ ok: true, value: draft.value, suppress: !!draft.suppress });
+  const cancel = () => host.resolve({ ok: false, suppress: !!draft.suppress });
+  return html`
+    <div class="js-head">
+      <span class="js-site">${d.favicon ? html`<img src=${String(d.favicon)} alt="" />` : icon('globe', 15)}</span>
+      <h2 id="dlg-title" class="js-who">${who}</h2>
+    </div>
+    ${message ? html`<div class="js-msg" id="js-msg">${message}</div>` : nothing}
+    ${kind === 'prompt'
+      ? html`<input class="js-input" type="text" autofocus aria-label=${message || who} .value=${draft.value}
+          @focus=${(e: FocusEvent) => (e.target as HTMLInputElement).select()}
+          @input=${(e: InputEvent) => (draft.value = (e.target as HTMLInputElement).value)}
+          @keydown=${(e: KeyboardEvent) => e.key === 'Enter' && !e.isComposing && (e.preventDefault(), ok())} />`
+      : nothing}
+    ${d.offerSuppress
+      ? html`<label class="check js-suppress"><input type="checkbox" .checked=${!!draft.suppress} @change=${(e: Event) => (draft.suppress = (e.target as HTMLInputElement).checked)} /> ${t('js_suppress')}</label>`
+      : nothing}
+    <div class="actions">
+      ${kind === 'alert' ? nothing : html`<button class="btn" @click=${cancel}>${t('action_cancel')}</button>`}
+      <button class="btn primary" ?autofocus=${kind !== 'prompt'} @click=${ok}>${t('action_ok')}</button>
+    </div>`;
+});
+
+// ---- Installable web apps (browser/apps/web_apps.ts)
+
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((ok, fail) => {
+    const i = new Image();
+    i.onload = () => ok(i);
+    i.onerror = fail;
+    i.src = src;
+  });
+
+/** Draws an app's icon at 512 px (and the macOS 1024 px grid): any image format, maskable icons rounded, a letter tile when there's none. */
+async function composeIcons(src: string | null, name: string, color: string | null, maskable: boolean): Promise<{ png: string; macPng: string }> {
+  const img = src ? await loadImage(src).catch(() => null) : null;
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d')!;
+  const rounded = (x: number, y: number, w: number, r: number) => {
+    g.beginPath();
+    g.roundRect(x, y, w, w, r);
+  };
+  if (img && maskable) {
+    rounded(0, 0, 512, 112);
+    g.clip();
+    g.drawImage(img, 0, 0, 512, 512);
+  } else if (img) {
+    const k = Math.min(512 / (img.naturalWidth || 512), 512 / (img.naturalHeight || 512));
+    const w = (img.naturalWidth || 512) * k;
+    const h = (img.naturalHeight || 512) * k;
+    g.drawImage(img, (512 - w) / 2, (512 - h) / 2, w, h);
+  } else {
+    rounded(0, 0, 512, 112);
+    g.fillStyle = color && /^#[0-9a-f]{3,8}$/i.test(color) ? color : '#2563eb';
+    g.fill();
+    g.fillStyle = '#fff';
+    g.font = '700 280px system-ui, -apple-system, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText((name.trim()[0] ?? 'A').toUpperCase(), 256, 276);
+  }
+  // macOS icons sit inside the 824 px square of a 1024 px canvas (Apple's icon grid).
+  const m = document.createElement('canvas');
+  m.width = m.height = 1024;
+  m.getContext('2d')!.drawImage(c, 100, 100, 824, 824);
+  return { png: c.toDataURL('image/png'), macPng: m.toDataURL('image/png') };
+}
+
+const appTile = (icon: unknown, name: string, color: unknown) =>
+  icon
+    ? html`<img class="ai-img" src=${String(icon)} alt="" />`
+    : html`<span class="ai-letter" style="--c:${typeof color === 'string' && /^#[0-9a-f]{3,8}$/i.test(color) ? color : 'var(--vz-accent)'}">${(name.trim()[0] ?? 'A').toUpperCase()}</span>`;
+
+registerDialog('app-install', (d, host) => {
+  const draft = host.draft as { name?: string; tab?: 'computer' | 'phone'; open?: boolean; desktop?: boolean; busy?: boolean };
+  draft.name ??= String(d.name ?? '');
+  draft.tab ??= 'computer';
+  draft.open ??= true;
+  draft.desktop ??= false;
+  const platform = String(d.platform ?? '');
+  const where = platform === 'darwin' ? t('app_where_launchpad') : platform === 'win32' ? t('app_where_start') : t('app_where_menu');
+  const install = async () => {
+    if (!draft.name!.trim() || draft.busy) return;
+    draft.busy = true;
+    host.requestUpdate();
+    const icons = await composeIcons(d.icon ? String(d.icon) : null, draft.name!, d.themeColor ? String(d.themeColor) : null, !!d.maskable);
+    host.resolve({ name: draft.name!.trim(), open: draft.open, desktop: draft.desktop, ...icons });
+  };
+  const qr = () => {
+    const q = qrcode(0, 'M');
+    q.addData(String(d.startUrl ?? ''));
+    q.make();
+    return q.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
+  };
+  const seg = (id: 'computer' | 'phone', label: string, ic: string) =>
+    html`<button role="tab" aria-selected=${draft.tab === id} @click=${() => ((draft.tab = id), host.requestUpdate())}>${icon(ic, 14)} ${label}</button>`;
+  return html`
+    <div class="ai-hero">
+      <span class="ai-tile">${appTile(d.icon, draft.name!, d.themeColor)}</span>
+      <div class="ai-id">
+        <h2 id="dlg-title">${t('app_install_title')}</h2>
+        <input class="ai-name" type="text" maxlength="80" aria-label=${t('app_name')} .value=${draft.name}
+          @input=${(e: InputEvent) => ((draft.name = (e.target as HTMLInputElement).value), host.requestUpdate())}
+          @keydown=${(e: KeyboardEvent) => e.key === 'Enter' && draft.tab === 'computer' && void install()} />
+        <div class="muted ai-origin">${icon('lock', 11)} ${d.origin}</div>
+      </div>
+    </div>
+    ${d.description ? html`<p class="muted ai-desc">${d.description}</p>` : nothing}
+    <div class="dp-tabs ai-tabs" role="tablist">${seg('computer', t('app_tab_computer'), 'monitor')}${seg('phone', t('app_tab_phone'), 'smartphone')}</div>
+    ${draft.tab === 'computer'
+      ? html`
+        <ul class="ai-points">
+          <li>${icon('columns', 15)}<span>${t('app_point_window')}</span></li>
+          <li>${icon('grid', 15)}<span>${where}</span></li>
+          <li>${icon('key', 15)}<span>${t('app_point_signin')}</span></li>
+          <li>${icon('shield-check', 15)}<span>${t('app_point_shields')}</span></li>
+        </ul>
+        <label class="check"><input type="checkbox" .checked=${!!draft.open} @change=${(e: Event) => (draft.open = (e.target as HTMLInputElement).checked)} /> ${t('app_open_after')}</label>
+        ${platform === 'darwin' ? nothing : html`<label class="check" style="margin-top:6px"><input type="checkbox" .checked=${!!draft.desktop} @change=${(e: Event) => (draft.desktop = (e.target as HTMLInputElement).checked)} /> ${t('app_desktop_shortcut')}</label>`}
+        <div class="actions">
+          <button class="btn" @click=${() => host.cancel()}>${t('action_cancel')}</button>
+          <button class="btn primary" autofocus ?disabled=${!draft.name!.trim() || draft.busy} @click=${() => void install()}>${icon('app-install', 14)} ${t('app_install')}</button>
+        </div>`
+      : html`
+        <div class="ai-phone">
+          <div class="qr-code ai-qr" role="img" aria-label=${t('tool_qr')} .innerHTML=${qr()}></div>
+          <ol class="ai-steps">
+            <li><b>${t('app_phone_ios')}</b><span>${t('app_phone_ios_steps')}</span></li>
+            <li><b>${t('app_phone_android')}</b><span>${t('app_phone_android_steps')}</span></li>
+          </ol>
+        </div>
+        <p class="muted ai-note">${t('app_phone_note')}</p>
+        <div class="actions"><button class="btn" autofocus @click=${() => host.cancel()}>${t('action_close')}</button></div>`}`;
+});
+
+registerDialog('app-installed', (d, host) => {
+  const where = d.where === 'launchpad' ? t('app_where_launchpad') : d.where === 'start-menu' ? t('app_where_start') : t('app_where_menu');
+  return html`
+    <div class="ai-done">
+      <span class="ai-tile big">${appTile(d.icon, String(d.name ?? ''), null)}<span class="ai-check">${icon('check', 14)}</span></span>
+      <h2 id="dlg-title">${t('app_installed_title', { name: String(d.name ?? '') })}</h2>
+      <p class="muted">${where}</p>
+    </div>
+    <div class="actions">
+      <button class="btn" @click=${() => host.cancel()}>${t('action_done')}</button>
+      <button class="btn primary" autofocus @click=${() => host.resolve({ action: 'open' })}>${icon('external', 14)} ${t('action_open')}</button>
+    </div>`;
+});
+
 registerDialog('space-edit', (d, host) => {
   const draft = host.draft as { name?: string; color?: string; icon?: string };
   draft.name ??= String(d.name ?? '');

@@ -66,10 +66,32 @@ test('clear site data removes the site’s cookies', async () => {
   await expect.poll(async () => inMain(h, async (vz) => (await vz.profile.session.cookies.get({ name: 'vzt', domain: '127.0.0.1' })).length)).toBe(0);
 });
 
-test('internal pages are glass where the window is (macOS)', async () => {
-  test.skip(process.platform !== 'darwin', 'glass is macOS / Windows 11');
-  await setup();
-  await inMain(h, (vz) => vz.focused().loadUrl(null, 'vizulla://settings/', { newTab: true }));
-  const page = (await waitFor(async () => h.app.windows().find((w) => w.url().startsWith('vizulla://settings')), (p) => !!p))!;
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--vz-page-bg'))).toContain('transparent');
+test('the frame takes the site colour (theme-color, else page background); white/black without one; menus are solid', async () => {
+  const { chrome } = await setup();
+  const frame = () => chrome.evaluate(() => getComputedStyle(document.querySelector('vz-shell')!).getPropertyValue('--fr-bg').trim());
+  const go = async (path: string, title: string) => {
+    await inMain(h, (vz, u) => vz.focused().loadUrl(vz.focused().activeTab().id, u), `${h.base}${path}`);
+    await waitFor(() => inMain(h, (vz) => vz.focused().activeTab().title), (t) => t === title);
+  };
+  await go('/brand', 'Brand');
+  await expect.poll(frame).toBe('#1a73e8');
+  // White ink on a brand blue, and the frame goes monochrome (no blue-on-blue accents).
+  expect(await chrome.evaluate(() => getComputedStyle(document.querySelector('vz-shell')!).getPropertyValue('--fr-text').trim())).toBe('#f5f7fa');
+  expect(await chrome.evaluate(() => document.querySelector('vz-shell')!.hasAttribute('tinted'))).toBe(true);
+  await go('/painted', 'Painted');
+  await expect.poll(frame).toBe('#0f766e');
+  // No site colour (an internal page): white in light theme, black in dark.
+  await inMain(h, (vz) => vz.profile.prefs.set('appearance.theme', 'light'));
+  await inMain(h, (vz) => vz.focused().loadUrl(vz.focused().activeTab().id, 'vizulla://settings/'));
+  await expect.poll(frame).toBe('#ffffff');
+  await inMain(h, (vz) => vz.profile.prefs.set('appearance.theme', 'dark'));
+  await expect.poll(frame).toBe('#000000');
+  // The setting turns it off.
+  await go('/brand', 'Brand');
+  await inMain(h, (vz) => vz.profile.prefs.set('appearance.siteColors', false));
+  await expect.poll(frame).toBe('#000000');
+  // Menus over the page are opaque (CSS blur can't reach the page from the overlay).
+  await chrome.locator('vz-toolbar').getByRole('button', { name: 'Tools', exact: true }).click();
+  const ov = await overlay(h);
+  expect(await ov.locator('.pop').first().evaluate((el) => getComputedStyle(el).backgroundColor)).toMatch(/^rgb\(/);
 });

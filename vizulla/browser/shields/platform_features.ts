@@ -72,7 +72,7 @@ export function installPlatformFeatures(app: BrowserApp): void {
   };
   electronApp.on('web-contents-created', (_e, wc) => applyWebRtc(wc));
   p.prefs.observe('shields.webrtcProtection', () => {
-    for (const wc of webContents.getAllWebContents()) if (wc.getType() !== 'window') applyWebRtc(wc);
+    for (const wc of webContents.getAllWebContents()) applyWebRtc(wc);
   });
   // Popups (Chrome's rules; Electron has no popup blocker): a page opens a tab only right
   // after a real click or key press, one per gesture, and never to a popup/popunder network.

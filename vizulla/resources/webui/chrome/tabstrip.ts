@@ -37,7 +37,7 @@ export class VzTabstrip extends LitElement {
       .dot { width: 24px; height: 24px; padding: 0; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), box-shadow var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .dot:hover { background: var(--vz-tab-hover); color: var(--c); }
       /* The current Space: its colour, a soft fill and a ring, readable on glass in both themes. */
-      .dot.on { background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
+      .dot.on { --sc: var(--vz-space-ink, var(--c)); background: color-mix(in srgb, var(--sc) 22%, transparent); color: var(--sc); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sc) 45%, transparent); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
       @keyframes vz-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .dot:active { transform: scale(0.92); }
       /* Tabs shrink to icons, then the strip scrolls (padding leaves room for the active tab's feet). */
@@ -69,7 +69,7 @@ export class VzTabstrip extends LitElement {
       .tab.active { z-index: 1; }
       /* The current tab: a soft pill on the shared surface, the same shape as the address field.
          Switching tabs, it eases in behind the text (text and layout never move). */
-      .tab.active::after { content: ''; position: absolute; inset: 3px 2px 3px 4px; z-index: -1; border-radius: 10px; background: color-mix(in srgb, var(--vz-text) 9%, transparent); box-shadow: var(--vz-glass-edge, 0 0 transparent); pointer-events: none; animation: pill-in 220ms var(--vz-ease); }
+      .tab.active::after { content: ''; position: absolute; inset: 3px 2px 3px 4px; z-index: -1; border-radius: 10px; background: color-mix(in srgb, var(--vz-text) 9%, transparent); pointer-events: none; animation: pill-in 220ms var(--vz-ease); }
       @keyframes pill-in { from { opacity: 0; transform: scale(.96); } }
       .tab.active .body { color: var(--vz-text); }
       .tab.pinned .body { justify-content: center; padding: 0; margin: 3px; }

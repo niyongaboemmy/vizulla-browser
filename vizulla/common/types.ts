@@ -102,8 +102,14 @@ export interface WindowState {
   aiMode: AiMode;
   features: Record<string, boolean>;
   fullscreen: boolean;
+  /** The active page as an installable web app: offer to install it, or open it in its app. */
+  install?: { state: 'installable' | 'installed'; name: string; id?: string } | null;
   /** The frame is translucent over a system material (macOS vibrancy, Windows 11 Mica). */
   glass: boolean;
+  /** The window is in front (a light sweep plays as it comes forward). */
+  active?: boolean;
+  /** The active site's colour for the frame (null: white in light theme, black in dark). */
+  chromeColor?: string | null;
   /** Extensions pinned to the toolbar, how many are loaded, and the tab their buttons act on. */
   extensions: { pinned: string[]; count: number; activeWcId: number | null };
   /** Classic mode only: the bookmarks bar (first folder level). */

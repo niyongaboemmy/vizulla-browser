@@ -195,8 +195,7 @@ const CSS = `
   position: fixed; z-index: 2147483647; pointer-events: none; max-width: 280px;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px;
   border-radius: 10px; border: 1px solid var(--vz-glass-border, rgba(37,99,235,.14));
-  background: color-mix(in srgb, var(--vz-text, #0f172a) 86%, transparent); color: var(--vz-bg, #fff);
-  backdrop-filter: blur(16px) saturate(170%); -webkit-backdrop-filter: blur(16px) saturate(170%);
+  background: color-mix(in srgb, var(--vz-text, #0f172a) 94%, transparent); color: var(--vz-bg, #fff);
   font: 500 12px/1.35 var(--vz-font, system-ui, sans-serif); letter-spacing: .01em;
   opacity: 0; visibility: hidden; transform-origin: top center;
   --dx: 0px; --dy: -4px;
