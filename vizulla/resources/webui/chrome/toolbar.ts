@@ -32,11 +32,13 @@ export class VzToolbar extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; align-items: center; gap: 2px; height: 46px; color: var(--vz-text-2); padding: 0 10px; position: relative; z-index: 1; }
+      :host { display: flex; align-items: center; gap: 2px; height: 46px; color: var(--vz-text-2); padding: 0 10px; position: relative; z-index: 1; container: toolbar / inline-size; min-width: 0; }
       :host([mode='compact']) { -webkit-app-region: drag; }
       :host > * { -webkit-app-region: no-drag; }
-      .icon-btn { width: 34px; height: 34px; border-radius: 50%; }
-      .omni { flex: 1; display: flex; align-items: center; gap: 6px; height: 36px; margin: 0 8px; padding: 0 6px 0 4px; min-width: 0;
+      /* Every toolbar action is the same plain icon: one size, one colour, no labels or decorations. */
+      .icon-btn { width: 34px; height: 34px; border-radius: 50%; flex: none; }
+      .icon-btn .vz-icon, .icon-btn .vz-gem { width: 18px; height: 18px; }
+      .omni { flex: 1; display: flex; align-items: center; gap: 6px; height: 36px; margin: 0 8px; padding: 0 6px 0 4px; min-width: 96px; overflow: hidden;
         border-radius: 999px; background: var(--vz-omnibox-bg, var(--vz-omnibox)); transition: background var(--vz-dur), box-shadow 240ms var(--vz-ease); }
       .omni:hover { background: var(--vz-omnibox-hover); }
       /* Focus: the field turns solid and a soft accent glow spreads around it. */
@@ -48,10 +50,11 @@ export class VzToolbar extends LitElement {
       .sec.insecure, .sec.dangerous { color: var(--vz-danger); background: color-mix(in srgb, var(--vz-danger) 12%, transparent); width: auto; padding: 0 8px; border-radius: 999px; gap: 4px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; }
       .addr { all: unset; flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; cursor: text; white-space: nowrap; overflow: hidden; font-size: 14px; letter-spacing: .005em; }
       .addr:focus-visible { outline: none; }
-      .host { color: var(--vz-text); }
-      .path { color: var(--vz-text-3); overflow: hidden; text-overflow: ellipsis; }
+      /* A narrow field drops the path first, then ends the host with "…". */
+      .host { color: var(--vz-text); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      .path { color: var(--vz-text-3); flex: 0 10000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       .ph { color: var(--vz-text-3); }
-      .chip-btn { display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--vz-text-2);
+      .chip-btn { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--vz-text-2);
         cursor: pointer; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; transition: background var(--vz-dur); }
       .chip-btn:hover { background: var(--vz-surface-hover); }
       .chip-btn.has { color: var(--vz-accent); }
@@ -91,31 +94,15 @@ export class VzToolbar extends LitElement {
       img.me-av { object-fit: cover; background: var(--vz-surface-2); }
       /* Signed in to Google: the avatar is your account photo, ringed in this profile's colour when there are several profiles. */
       .me.ringed .me-av { box-shadow: 0 0 0 2px var(--fr-bg, var(--vz-toolbar)), 0 0 0 3.5px var(--c); }
-      /* "Ask Gemini", as in Chrome: a soft pill whose star turns on hover. */
-      .gem-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px 0 10px; margin: 0 4px; border: 0; border-radius: 999px; cursor: pointer; flex: none;
-        background: var(--vz-omnibox-bg, var(--vz-omnibox)); color: var(--vz-text); font-size: 13px; font-weight: 600; letter-spacing: .005em;
-        animation: install-in 420ms cubic-bezier(.34,1.56,.64,1); transition: background var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
-      .gem-btn:hover { background: var(--vz-omnibox-hover); }
-      .gem-btn:active { transform: scale(.96); }
-      .gem-btn .vz-gem { transition: transform 420ms cubic-bezier(.34,1.56,.64,1); }
-      .gem-btn:hover .vz-gem { transform: rotate(90deg) scale(1.08); }
-      .gem-btn.on { background: var(--vz-accent-soft); color: var(--vz-accent); }
       .tabs-btn { display: none; }
-      @media (max-width: 1000px) {
-        .gem-label { display: none; }
-        .gem-btn { width: 34px; padding: 0; justify-content: center; margin: 0 2px; }
-      }
-      @media (max-width: 760px) {
-        .wide { display: none; }
-        .omni { margin: 0 2px; }
-        .toast { max-width: 180px; }
-      }
+      /* Narrower toolbar, fewer buttons (each one stays reachable from the ⋮ or account menu):
+         wide: reader, notes, agent, downloads, pinned extensions · mid: forward, tools, bookmark · low: AI, Gemini. */
+      @container toolbar (max-width: 920px) { .wide { display: none; } }
+      @container toolbar (max-width: 700px) { .mid { display: none; } .omni { margin: 0 4px; } .toast { max-width: 160px; } .toast span { display: none; } }
+      @container toolbar (max-width: 540px) { .low { display: none; } .icon-btn { width: 32px; height: 32px; } :host { padding: 0 6px; } }
       @media (max-width: 599px) {
-        .mid { display: none; }
         .tabs-btn { display: grid; }
         .sidebar-btn { display: none; }
-        .toast span { display: none; }
-        .icon-btn { width: 32px; height: 32px; }
       }
     `,
   ];
@@ -130,12 +117,12 @@ export class VzToolbar extends LitElement {
     const toast = s.toasts.at(-1);
     return html`
       ${compact && mac && !s.fullscreen && !this.rail ? html`<span class="lead" style="--traffic:70px"></span>` : nothing}
-      ${compact && !this.rail ? html`<button class="icon-btn sidebar-btn" aria-label=${t('cmd_toggle_sidebar')} title=${t('cmd_toggle_sidebar')} @click=${() => shell.runCommand('view.toggleSidebar')}>${icon('sidebar', 17)}</button>
-        <button class="icon-btn tabs-btn" aria-label=${t('cmd_tab_search')} title=${t('cmd_tab_search')} @click=${() => shell.runCommand('tab.search')}>${icon('layers', 17)}</button>` : nothing}
-      <button class="icon-btn" aria-label=${t('cmd_nav_back')} title=${t('cmd_nav_back')} data-kbd=${mac ? '⌘[' : 'Alt+←'} ?disabled=${!tab?.canGoBack} @click=${() => tab && shell.goBack(tab.id)}>${icon('arrow-left', 17)}</button>
-      <button class="icon-btn mid" aria-label=${t('cmd_nav_forward')} title=${t('cmd_nav_forward')} data-kbd=${mac ? '⌘]' : 'Alt+→'} ?disabled=${!tab?.canGoForward} @click=${() => tab && shell.goForward(tab.id)}>${icon('arrow-right', 17)}</button>
+      ${compact && !this.rail ? html`<button class="icon-btn sidebar-btn" aria-label=${t('cmd_toggle_sidebar')} title=${t('cmd_toggle_sidebar')} @click=${() => shell.runCommand('view.toggleSidebar')}>${icon('sidebar', 18)}</button>
+        <button class="icon-btn tabs-btn" aria-label=${t('cmd_tab_search')} title=${t('cmd_tab_search')} @click=${() => shell.runCommand('tab.search')}>${icon('layers', 18)}</button>` : nothing}
+      <button class="icon-btn" aria-label=${t('cmd_nav_back')} title=${t('cmd_nav_back')} data-kbd=${mac ? '⌘[' : 'Alt+←'} ?disabled=${!tab?.canGoBack} @click=${() => tab && shell.goBack(tab.id)}>${icon('arrow-left', 18)}</button>
+      <button class="icon-btn mid" aria-label=${t('cmd_nav_forward')} title=${t('cmd_nav_forward')} data-kbd=${mac ? '⌘]' : 'Alt+→'} ?disabled=${!tab?.canGoForward} @click=${() => tab && shell.goForward(tab.id)}>${icon('arrow-right', 18)}</button>
       <button class="icon-btn" aria-label=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} title=${tab?.loading ? t('action_stop') : t('cmd_nav_reload')} data-kbd=${tab?.loading ? 'Esc' : mac ? '⌘R' : 'Ctrl+R'}
-        @click=${() => tab && (tab.loading ? shell.stop(tab.id) : shell.reload(tab.id))}>${icon(tab?.loading ? 'x' : 'refresh', 16)}</button>
+        @click=${() => tab && (tab.loading ? shell.stop(tab.id) : shell.reload(tab.id))}>${icon(tab?.loading ? 'x' : 'refresh', 18)}</button>
       ${compact && !this.rail ? html`<button class="icon-btn" aria-label=${t('cmd_tab_new')} title=${t('cmd_tab_new')} data-kbd=${mac ? '⌘T' : 'Ctrl+T'} @click=${() => shell.newTab()}>${icon('plus', 18)}</button>` : nothing}
       <div class="omni">
         ${host && tab && /^https?:/.test(tab.url)
@@ -148,42 +135,42 @@ export class VzToolbar extends LitElement {
           ${host ? html`<span class="host">${host}</span><span class="path">${path}</span>` : html`<span class="ph">${t('cb_placeholder')}</span>`}
         </button>
         ${tab && s.install?.state === 'installable'
-          ? html`<button class="chip-btn install" aria-label=${t('app_install_named', { name: s.install.name })} title=${t('app_install_named', { name: s.install.name })} @click=${() => shell.installApp(tab.id)}>${icon('app-install', 14)}<span>${t('app_install')}</span></button>`
+          ? html`<button class="chip-btn install" aria-label=${t('app_install_named', { name: s.install.name })} title=${t('app_install_named', { name: s.install.name })} @click=${() => shell.installApp(tab.id)}>${icon('app-install', 16)}<span>${t('app_install')}</span></button>`
           : tab && s.install?.state === 'installed'
-            ? html`<button class="chip-btn wide" aria-label=${t('app_open_in', { name: s.install.name })} title=${t('app_open_in', { name: s.install.name })} @click=${() => shell.openInApp(tab.id)}>${icon('external', 14)}</button>`
+            ? html`<button class="chip-btn wide" aria-label=${t('app_open_in', { name: s.install.name })} title=${t('app_open_in', { name: s.install.name })} @click=${() => shell.openInApp(tab.id)}>${icon('external', 16)}</button>`
             : nothing}
         ${tab && /^https?:/.test(tab.url)
           ? html`<button class="chip-btn ${tab.blocked ? 'has' : ''}" aria-label=${t('shields_button', { count: tab.blocked })} title=${t('shields_button', { count: tab.blocked })}
               @click=${(e: MouseEvent) => {
                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 void shell.openShieldsPanel({ x: r.x, y: r.y, width: r.width, height: r.height });
-              }}>${icon(tab.blocked ? 'shield-check' : 'shield', 14)}${tab.blocked || nothing}</button>
+              }}>${icon(tab.blocked ? 'shield-check' : 'shield', 16)}${tab.blocked || nothing}</button>
             ${tab.passwords.form || tab.passwords.logins
               ? html`<button class="chip-btn ${tab.passwords.logins ? 'has' : ''}" aria-label=${t('pw_key_button')} title=${t('pw_key_button')}
                   @click=${(e: MouseEvent) => {
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     void shell.showPasswordMenu(tab.id, { x: Math.round(r.left), y: Math.round(r.bottom + 4) });
-                  }}>${icon('key', 14)}</button>`
+                  }}>${icon('key', 16)}</button>`
               : nothing}
-            <button class="chip-btn wide" aria-label=${t('cmd_reader')} title=${t('cmd_reader')} @click=${() => shell.runCommand('view.reader')}>${icon('reader', 14)}</button>
-            <button class="chip-btn wide" aria-label=${t('cmd_bookmark')} title=${t('cmd_bookmark')} @click=${() => shell.runCommand('nav.bookmark')}>${icon('star', 14)}</button>`
+            <button class="chip-btn wide" aria-label=${t('cmd_reader')} title=${t('cmd_reader')} @click=${() => shell.runCommand('view.reader')}>${icon('reader', 16)}</button>
+            <button class="chip-btn mid" aria-label=${t('cmd_bookmark')} title=${t('cmd_bookmark')} @click=${() => shell.runCommand('nav.bookmark')}>${icon('star', 16)}</button>`
           : nothing}
       </div>
       ${this.renderGemini()}
-      <button class="icon-btn wide" aria-label=${t('cmd_tools')} title=${t('cmd_tools')} aria-haspopup="menu" @click=${(e: MouseEvent) => {
+      <button class="icon-btn mid" aria-label=${t('cmd_tools')} title=${t('cmd_tools')} aria-haspopup="menu" @click=${(e: MouseEvent) => {
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         void shell.openToolsMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
-      }}>${icon('wand', 17)}</button>
+      }}>${icon('wand', 18)}</button>
       ${this.renderExtensions()}
       ${toast ? html`<div class="toast" role="status" aria-live="polite"><span>${toast.text}</span>
           ${toast.action ? html`<button @click=${() => shell.toastAction(toast.id)}>${toast.action.label}</button>` : nothing}
           <button aria-label=${t('action_close')} style="color:var(--vz-text-2)" @click=${() => shell.dismissToast(toast.id)}>${icon('x', 12)}</button></div>` : nothing}
-      ${s.aiMode !== 'off' ? html`<button class="icon-btn ${s.panel === 'assistant' ? 'on' : ''}" aria-label=${t('cmd_ai_panel')} title=${t('cmd_ai_panel')} aria-pressed=${s.panel === 'assistant'} @click=${() => shell.runCommand('ai.panel')}>${icon('sparkle', 17)}</button>` : nothing}
-      ${s.features.VizullaNotes ? html`<button class="icon-btn wide ${s.panel === 'notes' ? 'on' : ''}" aria-label=${t('cmd_notes_panel')} title=${t('cmd_notes_panel')} aria-pressed=${s.panel === 'notes'} @click=${() => shell.runCommand('notes.panel')}>${icon('note', 17)}</button>` : nothing}
-      ${s.features.VizullaAgent ? html`<button class="icon-btn wide ${s.panel === 'agent' ? 'on' : ''}" aria-label=${t('agent_panel')} title=${t('agent_panel')} aria-pressed=${s.panel === 'agent'} @click=${() => shell.setPanel('agent')}>${icon('bot', 17)}</button>` : nothing}
+      ${s.aiMode !== 'off' ? html`<button class="icon-btn low ${s.panel === 'assistant' ? 'on' : ''}" aria-label=${t('cmd_ai_panel')} title=${t('cmd_ai_panel')} aria-pressed=${s.panel === 'assistant'} @click=${() => shell.runCommand('ai.panel')}>${icon('sparkle', 18)}</button>` : nothing}
+      ${s.features.VizullaNotes ? html`<button class="icon-btn wide ${s.panel === 'notes' ? 'on' : ''}" aria-label=${t('cmd_notes_panel')} title=${t('cmd_notes_panel')} aria-pressed=${s.panel === 'notes'} @click=${() => shell.runCommand('notes.panel')}>${icon('note', 18)}</button>` : nothing}
+      ${s.features.VizullaAgent ? html`<button class="icon-btn wide ${s.panel === 'agent' ? 'on' : ''}" aria-label=${t('agent_panel')} title=${t('agent_panel')} aria-pressed=${s.panel === 'agent'} @click=${() => shell.setPanel('agent')}>${icon('bot', 18)}</button>` : nothing}
       ${s.update ? this.renderUpdate(s.update) : nothing}
       <span class="sep wide"></span>
-      <button class="icon-btn wide" aria-label=${t('cmd_downloads')} title=${t('cmd_downloads')} @click=${() => shell.runCommand('page.downloads')}>${icon('download', 17)}</button>
+      <button class="icon-btn wide" aria-label=${t('cmd_downloads')} title=${t('cmd_downloads')} @click=${() => shell.runCommand('page.downloads')}>${icon('download', 18)}</button>
       ${s.platform.endsWith(':private')
         ? nothing
         : this.renderMe()}
@@ -243,7 +230,7 @@ export class VzToolbar extends LitElement {
       <button class="icon-btn" aria-label=${t('ext_puzzle')} title=${t('ext_puzzle')} @click=${(e: MouseEvent) => {
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         void shell.openExtensionsMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
-      }}>${icon('puzzle', 17)}</button>`;
+      }}>${icon('puzzle', 18)}</button>`;
   }
 
   /** The avatar: your Google account photo when signed in on the web, else this profile's initial. */
@@ -260,13 +247,12 @@ export class VzToolbar extends LitElement {
       }}>${me?.photo ? html`<img class="me-av" src=${me.photo} alt="" />` : html`<span class="me-av">${((me?.name ?? s.profile.name)[0] ?? '?').toUpperCase()}</span>`}</button>`;
   }
 
-  /** "Ask Gemini": shown once you're signed in to Google on the web; opens Gemini beside the page. */
+  /** Gemini: shown once you're signed in to Google on the web; opens Gemini beside the page. */
   private renderGemini() {
     const g = this.state.google;
     if (!g?.gemini || !g.accounts.some((a) => !a.signedOut)) return nothing;
     const on = this.state.panel === 'gemini';
-    return html`<button class="gem-btn ${on ? 'on' : ''}" aria-pressed=${on} aria-label=${t('gemini_ask')} title=${t('gemini_ask')} @click=${() => shell.runCommand('google.gemini')}>
-      ${geminiMark(17)}<span class="gem-label">${t('gemini_ask')}</span></button>`;
+    return html`<button class="icon-btn low ${on ? 'on' : ''}" aria-pressed=${on} aria-label=${t('gemini_ask')} title=${t('gemini_ask')} @click=${() => shell.runCommand('google.gemini')}>${geminiMark(18)}</button>`;
   }
 
   private renderUpdate(u: UpdateInfo) {

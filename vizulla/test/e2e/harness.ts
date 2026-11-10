@@ -68,6 +68,16 @@ const PAGES: Record<string, string> = {
   '/toggle': `<!doctype html><title>Toggle</title><style>body{margin:0;background:#ffffff;transition:background-color .2s}html.dark body{background:#0b1020}header{height:60px}</style>
     <header></header><button id="t" onclick="document.documentElement.classList.toggle('dark')">Dark mode</button>`,
   '/dialogs': `<!doctype html><title>Dialogs</title><h1>Dialogs</h1><iframe id="f" width="300" height="80"></iframe>`,
+  // "Sign in with…": the site (localhost) opens the provider (127.0.0.1, another origin) in a popup;
+  // the provider hands a token back to window.opener and closes, like Google, Apple or GitHub.
+  '/sso': `<!doctype html><title>Shop</title><button id="signin">Sign in with Provider</button><button id="tab">Help</button><script>
+    const provider = location.origin.replace('localhost', '127.0.0.1');
+    document.getElementById('signin').onclick = () => window.open(provider + '/sso-provider', 'signin', 'width=480,height=600');
+    document.getElementById('tab').onclick = () => window.open(provider + '/article', '_blank');
+    addEventListener('message', (e) => { if (e.origin === provider) document.title = 'Signed in: ' + e.data; });</script>`,
+  '/sso-provider': `<!doctype html><title>Provider sign-in</title><p id="who"></p><button id="allow">Continue as Ada</button><script>
+    document.getElementById('who').textContent = window.opener ? 'opener ok' : 'no opener';
+    document.getElementById('allow').onclick = () => { window.opener.postMessage('token-123', '*'); window.close(); };</script>`,
   '/gemini': `<!doctype html><title>Gemini</title><div contenteditable="true" role="textbox" aria-label="Enter a prompt here" style="min-height:40px;border:1px solid #ccc"></div>`,
   '/pwa': `<!doctype html><title>Vizulla Test App</title><link rel="manifest" href="/manifest.webmanifest"><h1>Test app</h1><script>
     window.__bip = null; addEventListener('beforeinstallprompt', (e) => { window.__bip = e; }); addEventListener('appinstalled', () => { window.__installed = true; });</script>`,

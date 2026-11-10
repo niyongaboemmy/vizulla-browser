@@ -78,6 +78,8 @@ export class BrowserApp {
   webApps: import('./apps/web_apps').WebAppsService | null = null;
   /** Google accounts on the web and Gemini (google/google_service.ts), set up with the phase services. */
   google: import('./google/google_service').GoogleService | null = null;
+  /** Sign-in and payment popups open from pages (ui/popup_window.ts). */
+  readonly popups = new Set<import('./ui/popup_window').PopupWindow>();
   /** An installed app's window in front takes the menu shortcuts it understands. */
   appCommand: ((id: string) => boolean) | null = null;
   mcp!: McpServer;
@@ -206,6 +208,8 @@ export class BrowserApp {
         },
       };
     }
+    const popup = [...this.popups].find((p) => p.wc === wc);
+    if (popup) return { overlay: popup.overlay, favicon: null, focus: () => popup.focus() };
     return this.appDialogHost?.(wc) ?? null;
   }
 
@@ -373,6 +377,8 @@ export class BrowserApp {
 
   async runCommand(w: BrowserWindowController | null, id: string, args?: Record<string, unknown>): Promise<void> {
     if (!w && this.appCommand?.(id)) return;
+    // A sign-in popup in front takes the shortcuts it understands (⌘W closes it, not the tab behind).
+    if (!w && [...this.popups].find((p) => !p.win.isDestroyed() && p.win.isFocused())?.command(id)) return;
     const target = w ?? this.focused();
     const handler = this.commandHandlers.get(id);
     const def = findCommand(id);
@@ -587,7 +593,7 @@ export class BrowserApp {
       return w;
     };
     const overlayOf = (ctx: CallContext) => {
-      const o = this.windowForSender(ctx.sender)?.overlay ?? this.webApps?.overlayForSender(ctx.sender);
+      const o = this.windowForSender(ctx.sender)?.overlay ?? this.webApps?.overlayForSender(ctx.sender) ?? [...this.popups].find((p) => p.overlay.webContents === ctx.sender)?.overlay;
       if (!o) throw new Error('no overlay');
       return o;
     };

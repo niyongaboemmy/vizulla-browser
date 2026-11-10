@@ -14,6 +14,7 @@ import { logicalUrl, WebTab, type WebTabOptions } from '../tabs/web_tab';
 import type { NavState, SessionWindow } from '../spaces/spaces_service';
 import { OverlayController } from './overlay';
 import { TipView } from './tip_view';
+import { PopupWindow } from './popup_window';
 import { emitTo } from './ipc_router';
 import { buildPageContextMenu } from './context_menu';
 import { classifyInput, displayUrl, searchUrl, siteOf } from '@vz/common/url';
@@ -216,7 +217,9 @@ export class BrowserWindowController extends EventEmitter {
   }
 
   private openerFor(tab: WebTab): WebTabOptions['onOpen'] {
-    return ({ url, disposition, options }) => {
+    return ({ url, disposition, features, options }) => {
+      // A sign-in or payment popup (window.open with a size or `popup`): a small window over this one, as in Chrome.
+      if (disposition === 'new-window' && !tab.agent && /^(https?:|about:blank|$)/.test(url)) return new PopupWindow(this.app, this, options, features).wc;
       const view = new WebContentsView({ webContents: (options as { webContents?: WebContents }).webContents, webPreferences: options.webPreferences } as Electron.WebContentsViewConstructorOptions);
       const child = this.createTab({
         adoptView: view, url, spaceId: this.model.get(tab.id)?.spaceId, afterId: tab.id, openerId: tab.id,

@@ -23,7 +23,7 @@ export function securityIcon(s: SecurityState): string {
     case 'dangerous':
       return 'alert';
     case 'internal':
-      return 'sparkle';
+      return 'info';
     case 'file':
       return 'note';
     default:

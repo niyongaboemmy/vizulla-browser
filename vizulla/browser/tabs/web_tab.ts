@@ -29,7 +29,7 @@ export interface WebTabOptions {
   /** Agent tabs run in an isolated session and get no internal-page preload. */
   agent?: boolean;
   /** Called to turn a window.open into a real tab. Must return the new tab's WebContents. */
-  onOpen?: (opts: { url: string; disposition: string; options: Electron.BrowserWindowConstructorOptions }) => WebContents | null;
+  onOpen?: (opts: { url: string; disposition: string; features: string; options: Electron.BrowserWindowConstructorOptions }) => WebContents | null;
   /** Lets an existing WebContents (created by window.open) be adopted. */
   adoptView?: WebContentsView;
 }
@@ -318,14 +318,15 @@ export class WebTab extends EventEmitter {
       }
     });
     wc.on('will-prevent-unload', (e) => e.preventDefault());
-    // Pages cannot open native windows: window.open becomes a tab (keeping the opener).
+    // window.open becomes a tab, or a popup window when the page asks for one (sizes, `popup`);
+    // both keep the opener (ui/popup_window.ts).
     wc.setWindowOpenHandler((details) => {
       if (!this.onOpen) return { action: 'deny' };
       if (!/^(https?|about|blob|data):/.test(details.url) && details.url !== '') return { action: 'deny' };
       if (WebTab.popupPolicy && !WebTab.popupPolicy(wc, details.url, details.disposition)) return { action: 'deny' };
       return {
         action: 'allow',
-        createWindow: (options) => this.onOpen!({ url: details.url, disposition: details.disposition, options }) as WebContents,
+        createWindow: (options) => this.onOpen!({ url: details.url, disposition: details.disposition, features: details.features, options }) as WebContents,
       };
     });
   }

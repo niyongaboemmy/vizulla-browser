@@ -202,7 +202,7 @@ if (/^https?:$/.test(location.protocol)) {
     };
     document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start, { once: true }) : start();
   }
-  let lastSent = 0;
+  let lastSent = -Infinity; // timeStamp counts from page load: a click right after it counts too
   const activation = (e: Event) => {
     if (!e.isTrusted || e.timeStamp - lastSent < 200) return;
     lastSent = e.timeStamp;

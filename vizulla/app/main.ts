@@ -8,6 +8,7 @@ import { Profile } from '@vz/browser/profile';
 import { BrowserApp } from '@vz/browser/browser_app';
 import { installPhaseServices } from '@vz/browser/services';
 import { runSelfTest } from './self_test';
+import { webUserAgent } from '@vz/common/user_agent';
 
 const OUT = join(__dirname, '..');
 
@@ -17,11 +18,15 @@ if (!process.argv.some((a) => a.startsWith('--user-data-dir='))) {
   app.setPath('userData', join(app.getPath('appData'), BRANDING.userDataDirName));
 }
 registerVizullaScheme();
+// Sites see Chrome's user agent, as Brave, Edge, Vivaldi and Arc send it: "Electron/…" or an unknown
+// product token makes Google, Apple and others treat Vizulla as an embedded web view and refuse or
+// degrade sign-in ("This browser or app may not be secure").
+app.userAgentFallback = webUserAgent(app.userAgentFallback);
 // No Google API keys, no background networking to Google services (SRS C4).
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-domain-reliability');
 app.commandLine.appendSwitch('disable-component-update');
-app.commandLine.appendSwitch('disable-features', 'InterestFeedContentSuggestions,MediaRouter,OptimizationHints,Translate,AutofillServerCommunication,CertificateTransparencyComponentUpdater');
+app.commandLine.appendSwitch('disable-features', 'InterestFeedContentSuggestions,MediaRouter,OptimizationHints,Translate,AutofillServerCommunication,CertificateTransparencyComponentUpdater,FedCm');
 // Global Privacy Control is Chromium's own (Sec-GPC on every request + navigator.globalPrivacyControl):
 // no header hook in the browser process. Like third-party cookies, a change applies after a restart.
 const gpc = startupPref('privacy.gpc') !== false ? ',GlobalPrivacyControl,GlobalPrivacyControlForce' : '';
