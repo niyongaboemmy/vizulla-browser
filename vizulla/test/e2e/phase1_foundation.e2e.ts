@@ -63,9 +63,11 @@ test('the page view stacks above the chrome view and fills the content area', as
 });
 
 test('Shields blocks ad scripts and hides ad elements (SHD-01/02)', async () => {
-  h = await launch();
+  // A public-looking host: the filter lists leave element hiding off on 127.0.0.1/localhost.
+  h = await launch({ args: ['--host-resolver-rules=MAP news.vizulla.test 127.0.0.1'] });
   await h.chrome();
-  await inMain(h, (vz, url) => vz.focused().loadUrl(vz.focused().activeTab().id, url), `${h.base}/ads`);
+  await inMain(h, (vz) => vz.profile.prefs.set('shields.httpsFirst', false));
+  await inMain(h, (vz, url) => vz.focused().loadUrl(vz.focused().activeTab().id, url), `${h.base.replace('127.0.0.1', 'news.vizulla.test')}/ads`);
   await waitFor(() => activeTab(h), (t) => t.title === 'Ad test');
   const page = await waitFor(async () => h.app.windows().find((w) => w.url().endsWith('/ads')), (p) => !!p);
   await page!.waitForFunction(() => (window as unknown as { __appLoaded?: boolean }).__appLoaded === true);

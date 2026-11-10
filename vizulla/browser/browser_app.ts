@@ -20,7 +20,7 @@ import { confirmNl } from './ai/ai_features';
 import { UpdateService } from './updates/update_service';
 import { PasswordService } from './passwords/password_service';
 import { ExtensionsService } from './extensions/extensions_service';
-import type { WebTab } from './tabs/web_tab';
+import { WebTab } from './tabs/web_tab';
 import { profileArgs, Profiles } from './profiles/profiles';
 import { BRANDING } from '../app/branding';
 import { destinationUrl, matchDestinations } from './command_bar/destinations';
@@ -87,9 +87,24 @@ export class BrowserApp {
       e.returnValue = {
         langs: this.webLanguages.get(e.sender.session) ?? [],
         farble: this.farbleConfig?.(e.sender.session, e.senderFrame?.top?.url ?? e.sender.getURL()) ?? { level: 'off', seed: 0 },
+        // Same-site prefetch on hover: regular windows only (private ones keep nothing ahead of a click).
+        preload: profile.prefs.get('performance.preloadPages') && e.sender.session === profile.session && !e.senderFrame?.parent,
+        cosmetic: e.sender.session !== this.chromeSession,
+        scripts: e.sender.session === this.chromeSession ? [] : profile.shields.scriptsFor(e.senderFrame?.url ?? e.sender.getURL(), e.senderFrame?.top?.url ?? e.sender.getURL()),
       };
     });
+    ipcMain.handle('vz:cosmetic', (e, f: unknown) => {
+      const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length <= 300).slice(0, 2000) : []);
+      const o = (f ?? {}) as Record<string, unknown>;
+      const frame = e.senderFrame?.url ?? e.sender.getURL();
+      return profile.shields.cosmeticFor(frame, e.senderFrame?.top?.url ?? frame, { classes: list(o.classes), ids: list(o.ids), hrefs: list(o.hrefs) });
+    });
     this.applyLocale();
+    WebTab.fonts = () => {
+      const p = profile.prefs;
+      const family = Object.fromEntries((['standard', 'serif', 'sansSerif', 'monospace'] as const).map((k) => [k, p.get(`fonts.${k}`)]).filter(([, v]) => v));
+      return { ...(Object.keys(family).length ? { defaultFontFamily: family } : {}), ...(p.get('fonts.minimumSize') ? { minimumFontSize: p.get('fonts.minimumSize') } : {}) };
+    };
     profile.prefs.observe('appearance.locale', () => {
       this.applyLocale();
       this.buildMenu();
@@ -560,6 +575,8 @@ export class BrowserApp {
           if (tab) this.passwords.showMenu(w, tab, point);
         },
         showProfileMenu: (ctx, point) => this.showProfileMenu(win(ctx), point),
+        showTip: (ctx, r, doc) => void win(ctx).tip.show(r, doc),
+        hideTip: (ctx) => win(ctx).tip.hide(),
         detachTabs: (ctx, ids, point) => void this.moveTabs(ids.filter((x) => win(ctx).tabs.has(x)), 'new', { point }),
         adoptTabs: (ctx, ids, index) => void this.moveTabs(ids, win(ctx), { index }),
         showSpaceMenu: (ctx, spaceId, point) => this.showSpaceMenu(win(ctx), spaceId, point),

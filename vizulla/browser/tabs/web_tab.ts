@@ -80,9 +80,19 @@ export class WebTab extends EventEmitter {
     return this.view && !this.view.webContents.isDestroyed() ? this.view.webContents : null;
   }
 
+  /**
+   * Whether a page may open this popup (shields/platform_features.ts): Electron has no
+   * popup blocker of its own. Returning false denies it.
+   */
+  static popupPolicy: ((opener: WebContents, url: string, disposition: string) => boolean) | null = null;
+
+  /** The user's fonts (Settings → Appearance). Only used where a page sets no font of its own. */
+  static fonts: () => Pick<Electron.WebPreferences, 'defaultFontFamily' | 'minimumFontSize'> = () => ({});
+
   static createView(session: Session, preload: string, agent: boolean, extra: Electron.WebPreferences = {}): WebContentsView {
     return new WebContentsView({
       webPreferences: {
+        ...WebTab.fonts(),
         ...extra,
         session,
         sandbox: true,
@@ -95,6 +105,8 @@ export class WebTab extends EventEmitter {
         safeDialogs: true,
         navigateOnDragDrop: false,
         autoplayPolicy: 'document-user-activation-required',
+        // Cache compiled scripts from the first visit (not after V8's "hot" heuristic): faster repeat visits.
+        v8CacheOptions: 'bypassHeatCheck',
       },
     });
   }
@@ -245,6 +257,7 @@ export class WebTab extends EventEmitter {
     wc.setWindowOpenHandler((details) => {
       if (!this.onOpen) return { action: 'deny' };
       if (!/^(https?|about|blob|data):/.test(details.url) && details.url !== '') return { action: 'deny' };
+      if (WebTab.popupPolicy && !WebTab.popupPolicy(wc, details.url, details.disposition)) return { action: 'deny' };
       return {
         action: 'allow',
         createWindow: (options) => this.onOpen!({ url: details.url, disposition: details.disposition, options }) as WebContents,

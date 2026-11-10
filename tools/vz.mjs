@@ -7,6 +7,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir, totalmem, freemem } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bundleShields } from './shields_bundle.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'out');
@@ -95,7 +96,7 @@ async function cmdBuild({ dev = true, watch = false } = {}) {
     console.log('[vz] watching…');
     return;
   }
-  await Promise.all(targets.map((t) => build(t)));
+  await Promise.all([...targets.map((t) => build(t)), bundleShields({ root: ROOT, out: OUT, fresh: !dev })]);
   console.log(`[vz] built ${_pages.length} WebUI pages + browser/preload/utility bundles in ${Date.now() - t0} ms`);
 }
 

@@ -1,6 +1,6 @@
 // Shields filter engine (P1-BRW-02). Wraps a compiled adblock engine (EasyList
 // syntax, MPL-2.0 engine, license reviewed) behind three calls:
-//   load(serialized) · check(url, sourceUrl, type) · cosmetic(url)
+//   load(serialized) · check(url, sourceUrl, type) · cosmetic(url) · scripts(url)
 // The engine runs in the browser process on the request path (DD-3), so check()
 // must stay well under 0.1 ms median.
 import { FiltersEngine, Request } from '@ghostery/adblocker';
@@ -35,6 +35,16 @@ export class ShieldsEngine {
     const text = lists.join('\n');
     const rules = text.split('\n').filter((l) => l.trim() && !l.startsWith('!') && !l.startsWith('[')).length;
     return new ShieldsEngine(FiltersEngine.parse(text, { enableCompression: false, loadCosmeticFilters: true, loadNetworkFilters: true }), rules);
+  }
+
+  /**
+   * The full engine: filter lists plus uBlock Origin's resources (scriptlets such as
+   * json-prune for video ads, and surrogate scripts so players work without ad SDKs).
+   */
+  static fromListsWithResources(lists: string[], resources: string): ShieldsEngine {
+    const e = ShieldsEngine.fromLists(lists);
+    e.engine.updateResources(resources, String(resources.length));
+    return e;
   }
 
   static deserialize(bytes: Uint8Array): ShieldsEngine {
@@ -81,6 +91,56 @@ export class ShieldsEngine {
       getRulesFromHostname: true,
     });
     return { css: r.styles };
+  }
+
+  /**
+   * Generic element hiding for what's on the page: EasyList's class/id/link rules are
+   * only matched against the classes, ids and hrefs the page actually uses.
+   */
+  domCosmetic(url: string, f: { classes: string[]; ids: string[]; hrefs: string[] }): string {
+    let hostname = '';
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      return '';
+    }
+    return this.engine.getCosmeticsFilters({
+      url,
+      hostname,
+      domain: hostname.split('.').slice(-2).join('.'),
+      classes: f.classes,
+      ids: f.ids,
+      hrefs: f.hrefs,
+      getBaseRules: false,
+      getInjectionRules: false,
+      getExtendedRules: false,
+      getRulesFromDOM: true,
+      getRulesFromHostname: false,
+    }).styles;
+  }
+
+  /**
+   * Scriptlets for a frame (e.g. YouTube's ad fields pruned from the player response).
+   * They must run before the page's own scripts: page_preload.ts injects them.
+   */
+  scripts(url: string): string[] {
+    let hostname = '';
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      return [];
+    }
+    if (!hostname) return [];
+    return this.engine.getCosmeticsFilters({
+      url,
+      hostname,
+      domain: hostname.split('.').slice(-2).join('.'),
+      getBaseRules: false,
+      getInjectionRules: true,
+      getExtendedRules: false,
+      getRulesFromDOM: false,
+      getRulesFromHostname: true,
+    }).scripts;
   }
 }
 

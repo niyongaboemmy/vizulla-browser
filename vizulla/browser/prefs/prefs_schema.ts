@@ -11,6 +11,13 @@ export interface Prefs {
   'appearance.density': 'comfortable' | 'compact';
   'appearance.locale': 'auto' | 'en' | 'fr' | 'rw' | 'sw' | 'pseudo';
   'appearance.defaultZoom': number;
+  /** Fonts for pages that don't choose their own ('' = Chromium's default). Sites' own fonts are never replaced. */
+  'fonts.standard': string;
+  'fonts.serif': string;
+  'fonts.sansSerif': string;
+  'fonts.monospace': string;
+  /** Smallest text size pages may use, in px (0 = no minimum). */
+  'fonts.minimumSize': number;
   'tabs.layout': TabLayout;
   'tabs.classic': boolean;
   'tabs.sidebarWidth': number;
@@ -22,6 +29,8 @@ export interface Prefs {
   'tabs.memorySaverMinutes': number;
   'tabs.discardExemptSites': string[];
   'tabs.restoreOnStartup': boolean;
+  /** Prefetch a link on the current site while the pointer rests on it (never other sites, never private windows). */
+  'performance.preloadPages': boolean;
   'updates.autoCheck': boolean;
   'passwords.offerToSave': boolean;
   'passwords.neverSave': string[];
@@ -104,6 +113,11 @@ export const DEFAULT_PREFS: Prefs = {
   'appearance.density': 'comfortable',
   'appearance.locale': 'auto',
   'appearance.defaultZoom': 1,
+  'fonts.standard': '',
+  'fonts.serif': '',
+  'fonts.sansSerif': '',
+  'fonts.monospace': '',
+  'fonts.minimumSize': 0,
   'tabs.layout': 'horizontal',
   'tabs.classic': false,
   'tabs.sidebarWidth': 264,
@@ -115,6 +129,7 @@ export const DEFAULT_PREFS: Prefs = {
   'tabs.memorySaverMinutes': 30,
   'tabs.discardExemptSites': [],
   'tabs.restoreOnStartup': true,
+  'performance.preloadPages': true,
   'updates.autoCheck': true,
   'passwords.offerToSave': true,
   'passwords.neverSave': [],
@@ -184,6 +199,10 @@ export const DEFAULT_PREFS: Prefs = {
 
 export type PrefKey = keyof Prefs;
 
+function isFontName(v: unknown): boolean {
+  return typeof v === 'string' && v.length <= 80 && /^[\p{L}\p{N} ._-]*$/u.test(v);
+}
+
 /** Prefs a WebUI settings page may write, with validation. Anything else is rejected. */
 export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> = {
   'appearance.theme': (v) => ['system', 'light', 'dark', 'high-contrast'].includes(v as string),
@@ -191,12 +210,18 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'appearance.density': (v) => v === 'comfortable' || v === 'compact',
   'appearance.locale': (v) => ['auto', 'en', 'fr', 'rw', 'sw', 'pseudo'].includes(v as string),
   'appearance.defaultZoom': (v) => typeof v === 'number' && v >= 0.5 && v <= 3,
+  'fonts.standard': isFontName,
+  'fonts.serif': isFontName,
+  'fonts.sansSerif': isFontName,
+  'fonts.monospace': isFontName,
+  'fonts.minimumSize': (v) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 24,
   'tabs.layout': (v) => v === 'vertical' || v === 'horizontal',
   'tabs.classic': (v) => typeof v === 'boolean',
   'tabs.archiveEnabled': (v) => typeof v === 'boolean',
   'tabs.archiveAfterHours': (v) => typeof v === 'number' && v >= 1 && v <= 24 * 30,
   'tabs.memorySaverMinutes': (v) => typeof v === 'number' && v >= 0 && v <= 24 * 60,
   'tabs.restoreOnStartup': (v) => typeof v === 'boolean',
+  'performance.preloadPages': (v) => typeof v === 'boolean',
   'updates.autoCheck': (v) => typeof v === 'boolean',
   'passwords.offerToSave': (v) => typeof v === 'boolean',
   'passwords.neverSave': (v) => Array.isArray(v) && v.length <= 500 && v.every((x) => typeof x === 'string' && x.length <= 512),

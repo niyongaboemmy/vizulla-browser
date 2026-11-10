@@ -6,6 +6,7 @@ import { icon } from '../shared/icons';
 import '../shared/select';
 import { VzPage, switchStyles, timeAgo } from '../shared/page_base';
 import { applyLocale, applyTheme } from '../shared/theme';
+import { ACCENT_LABELS } from '@vz/common/tokens';
 import { t, getLocale, type StringKey } from '@vz/common/i18n';
 import { page } from '../shared/bridge';
 
@@ -42,6 +43,31 @@ const SECTIONS = [
   { id: 'permissions', icon: 'lock', title: 'settings_permissions' },
   { id: 'developer', icon: 'code', title: 'settings_developer' },
 ] as const;
+
+// Common fonts by role; Settings lists the ones installed on this computer.
+const FONT_CANDIDATES = {
+  standard: ['Arial', 'Helvetica', 'Helvetica Neue', 'Inter', 'Segoe UI', 'Roboto', 'Noto Sans', 'Open Sans', 'Lato', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia', 'Times New Roman', 'Times', 'Palatino', 'Charter', 'Avenir', 'Avenir Next', 'Gill Sans', 'Optima', 'Ubuntu', 'Cantarell', 'DejaVu Sans', 'Liberation Sans', 'Calibri', 'Cambria', 'Atkinson Hyperlegible', 'OpenDyslexic'],
+  serif: ['Georgia', 'Times New Roman', 'Times', 'Palatino', 'Palatino Linotype', 'Charter', 'Baskerville', 'Iowan Old Style', 'Cambria', 'Book Antiqua', 'Noto Serif', 'DejaVu Serif', 'Liberation Serif', 'Merriweather', 'Source Serif Pro', 'Garamond', 'Hoefler Text', 'New York'],
+  sansSerif: ['Arial', 'Helvetica', 'Helvetica Neue', 'Inter', 'Segoe UI', 'Roboto', 'Noto Sans', 'Open Sans', 'Lato', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Avenir', 'Avenir Next', 'Gill Sans', 'Optima', 'Ubuntu', 'Cantarell', 'DejaVu Sans', 'Liberation Sans', 'Calibri', 'SF Pro Text', 'Atkinson Hyperlegible', 'OpenDyslexic'],
+  monospace: ['Menlo', 'Monaco', 'SF Mono', 'Consolas', 'Courier New', 'Courier', 'Cascadia Code', 'Cascadia Mono', 'JetBrains Mono', 'Fira Code', 'Fira Mono', 'Source Code Pro', 'Roboto Mono', 'Ubuntu Mono', 'DejaVu Sans Mono', 'Liberation Mono', 'IBM Plex Mono', 'Lucida Console'],
+};
+const fontCache = new Map<string, string[]>();
+/** Installed fonts of a role: a font is present when it renders a sample differently from every generic fallback. */
+function installedFonts(role: keyof typeof FONT_CANDIDATES): string[] {
+  const hit = fontCache.get(role);
+  if (hit) return hit;
+  const ctx = document.createElement('canvas').getContext('2d');
+  const sample = 'mmmmmmmmmmlli1WQ@#';
+  const width = (font: string) => {
+    ctx!.font = `72px ${font}`;
+    return ctx!.measureText(sample).width;
+  };
+  const bases = ['monospace', 'serif', 'sans-serif'].map((g) => [g, ctx ? width(g) : 0] as const);
+  const found = ctx ? FONT_CANDIDATES[role].filter((f) => bases.some(([g, w]) => width(`"${f}", ${g}`) !== w)) : [];
+  const list = [...new Set(found)].sort((a, b) => a.localeCompare(b));
+  fontCache.set(role, list);
+  return list;
+}
 
 interface Row {
   section: string;
@@ -239,13 +265,20 @@ class VzSettings extends VzPage<Data> {
       { section: 'general', label: L('settings_updates_auto'), desc: L('settings_updates_auto_desc'), keywords: 'update upgrade version release',
         control: () => html`<button class="icon-btn" title=${L('cmd_check_updates')} aria-label=${L('cmd_check_updates')} @click=${() => this.invoke('command', { id: 'app.checkUpdates' })}>${icon('refresh', 15)}</button>${this.sw('updates.autoCheck')}` },
       { section: 'appearance', label: L('set_theme'), control: () => this.seg('appearance.theme', [{ id: 'system', name: L('theme_system') }, { id: 'light', name: L('theme_light') }, { id: 'dark', name: L('theme_dark') }, { id: 'high-contrast', name: L('theme_high_contrast') }]), keywords: 'dark light mode contrast' },
-      { section: 'appearance', label: L('set_accent'), desc: L('set_accent_desc'), control: () => this.select('appearance.accent', ['indigo', 'teal', 'amber', 'rose', 'violet', 'emerald', 'sky', 'slate'].map((c) => ({ id: c, name: c[0]!.toUpperCase() + c.slice(1) }))), keywords: 'color' },
+      { section: 'appearance', label: L('set_accent'), desc: L('set_accent_desc'), control: () => this.select('appearance.accent', (Object.keys(ACCENT_LABELS) as (keyof typeof ACCENT_LABELS)[]).map((c) => ({ id: c, name: ACCENT_LABELS[c] }))), keywords: 'color' },
       { section: 'appearance', label: L('set_density'), control: () => this.seg('appearance.density', [{ id: 'comfortable', name: L('density_comfortable') }, { id: 'compact', name: L('density_compact') }]) },
       { section: 'appearance', label: L('set_layout'), desc: L('set_layout_desc'), control: () => this.seg('tabs.layout', [{ id: 'vertical', name: L('layout_vertical') }, { id: 'horizontal', name: L('layout_horizontal') }]), keywords: 'tabs top side' },
       { section: 'appearance', label: L('set_classic'), desc: L('set_classic_desc'), control: () => this.sw('tabs.classic'), keywords: 'traditional old' },
       { section: 'appearance', label: L('set_zoom'), control: () => this.select('appearance.defaultZoom', [0.8, 0.9, 1, 1.1, 1.25, 1.5].map((z) => ({ id: z as unknown as string, name: `${Math.round(z * 100)}%` }))), keywords: 'text size bigger' },
+      { section: 'appearance', label: L('set_fonts'), desc: L('set_fonts_desc'), control: () => html``, keywords: 'font typeface text family' },
+      ...(['standard', 'serif', 'sansSerif', 'monospace'] as const).map((k) => ({
+        section: 'appearance', label: L(`set_font_${k}` as StringKey), keywords: 'font typeface text family',
+        control: () => this.select(`fonts.${k}`, [{ id: '', name: L('set_font_default') }, ...installedFonts(k).map((f) => ({ id: f, name: f }))]),
+      })),
+      { section: 'appearance', label: L('set_font_min'), desc: L('set_font_min_desc'), control: () => this.select('fonts.minimumSize', [0, 9, 10, 12, 14, 16, 18, 20, 24].map((n) => ({ id: n as unknown as string, name: n ? `${n}px` : L('set_font_min_none') }))), keywords: 'font small text size readable' },
       { section: 'tabs', label: L('set_archive'), desc: L('set_archive_desc'), control: () => this.sw('tabs.archiveEnabled'), keywords: 'clean idle' },
       { section: 'tabs', label: L('set_archive_after'), control: () => this.number('tabs.archiveAfterHours', 1, 720, L('unit_hours')) },
+      { section: 'tabs', label: L('set_preload'), desc: L('set_preload_desc'), control: () => this.sw('performance.preloadPages'), keywords: 'speed fast prefetch preload performance instant' },
       { section: 'tabs', label: L('set_memory_saver'), desc: L('set_memory_saver_desc'), control: () => this.number('tabs.memorySaverMinutes', 0, 1440, L('unit_minutes')), keywords: 'sleep discard ram' },
       { section: 'shields', label: L('set_shields'), desc: L('set_shields_desc'), control: () => this.sw('shields.enabled'), keywords: 'adblock ads trackers' },
       { section: 'shields', label: L('set_block_ads'), desc: L('set_block_ads_desc'), control: () => this.sw('shields.blockAds'), keywords: 'ads adblock advertising ad-free show ads' },

@@ -131,3 +131,8 @@
 ##.ob-widget
 ##[data-ad-slot]
 ##[data-ad-unit]
+
+! ---- Regional: Rwanda (self-hosted ads that global lists miss)
+! IGIHE: every placement-manager slot is a sponsored link (rel="sponsored").
+igihe.com##.pm-block
+igihe.com##.pm-item

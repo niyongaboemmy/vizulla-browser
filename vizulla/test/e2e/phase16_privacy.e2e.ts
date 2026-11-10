@@ -1,4 +1,4 @@
-// Privacy & security (0.4.1): Clean Links, Global Privacy Control (native, no
+// Privacy, security and UX (0.4.1–0.4.2): Clean Links, Global Privacy Control (native, no
 // header hooks), cross-site referrers, WebRTC IP protection, the Settings privacy checkup, and the
 // tab close button's alignment.
 import { expect, test } from '@playwright/test';
@@ -72,4 +72,69 @@ test('the tab close × is centred in its button', async () => {
   const [btn, glyph] = await Promise.all([x.boundingBox(), x.locator('svg').boundingBox()]);
   expect(Math.abs(btn!.x + btn!.width / 2 - (glyph!.x + glyph!.width / 2))).toBeLessThan(0.6);
   expect(Math.abs(btn!.y + btn!.height / 2 - (glyph!.y + glyph!.height / 2))).toBeLessThan(0.6);
+});
+
+test('pop-ups open only right after a real click, one per click; blocked ones offer "Open"', async () => {
+  h = await launch();
+  await h.chrome();
+  await go(`${h.base}/pop`);
+  const tabs = () => inMain(h, (vz) => vz.focused().tabs.size) as Promise<number>;
+  await run('window.openLater(); 1');
+  await new Promise((r) => setTimeout(r, 800));
+  expect(await tabs()).toBe(1);
+  expect(await inMain(h, (vz) => vz.focused().toasts.map((x: { text: string }) => x.text))).toContain('Pop-up blocked');
+  const web = h.app.windows().find((w) => w.url().endsWith('/pop'))!;
+  await web.click('#go');
+  await waitFor(tabs, (n) => n === 2);
+});
+
+test('the full filter lists ship with the app, with scriptlets for video ads', async () => {
+  h = await launch();
+  await h.chrome();
+  expect(await inMain(h, (vz) => vz.profile.shields.status(-1, '').ruleSource)).toBe('bundled');
+  expect(await inMain(h, (vz) => vz.profile.shields.scriptsFor('https://www.youtube.com/watch?v=x', 'https://www.youtube.com/watch?v=x').length)).toBeGreaterThan(0);
+  expect(await inMain(h, (vz) => vz.profile.shields.blocksPopup('https://popads.net/', 'https://news.example/'))).toBe(true);
+  // Typed addresses are never blocked as pages, only page-initiated trips to ad networks.
+  expect(await inMain(h, (vz) => vz.profile.shields.blocksPopup('https://github.com/', 'https://news.example/'))).toBe(false);
+});
+
+test('whole-page screenshots scroll and stitch the full height; the fixed header appears once', async () => {
+  h = await launch();
+  await h.chrome();
+  await go(`${h.base}/long`);
+  const size = await inMain(h, async (vz, _a, electron) => {
+    const file: string = await vz.tools.screenshot(vz.focused(), true);
+    const img = electron.nativeImage.createFromPath(file);
+    const page = await vz.focused().activeTab().wc.executeJavaScript('({ h: document.documentElement.scrollHeight, y: scrollY, dpr: devicePixelRatio })');
+    return { img: img.getSize(), page };
+  });
+  const cssHeight = size.img.height / size.page.dpr; // the PNG is saved at device pixels
+  expect(cssHeight).toBeGreaterThanOrEqual(size.page.h - 2);
+  expect(cssHeight).toBeLessThanOrEqual(size.page.h + 2);
+  expect(size.page.y).toBe(0); // scroll position restored
+});
+
+test('Settings lets you pick fonts; sites keep their own', async () => {
+  h = await launch();
+  await h.chrome();
+  await inMain(h, (vz) => vz.profile.prefs.set('fonts.minimumSize', 14));
+  await inMain(h, (vz, b) => vz.focused().loadUrl(null, `${b}/`, { newTab: true }), h.base);
+  await waitFor(() => inMain(h, (vz) => vz.focused().activeTab().wc?.isLoading()), (l) => l === false);
+  const px = await run<string>(`(() => { const p = document.createElement('p'); p.style.fontSize = '8px'; p.textContent = 'x'; document.body.append(p); return getComputedStyle(p).fontSize; })()`);
+  expect(parseFloat(px)).toBeGreaterThanOrEqual(14);
+});
+
+test('a tab’s tooltip is drawn above the page, not clipped under it', async () => {
+  h = await launch();
+  const chrome = await h.chrome();
+  await go(`${h.base}/long`);
+  await chrome.locator('vz-tabstrip .tab.active .body').hover();
+  const tip = await waitFor(() => inMain(h, (vz) => {
+    const t = vz.focused().tip;
+    return t.attached ? t.view.getBounds() : null;
+  }), (b) => !!b);
+  const tab = (await chrome.locator('vz-tabstrip .tab.active').boundingBox())!;
+  expect(tip!.y).toBeGreaterThanOrEqual(tab.y + tab.height); // below the tab, over the page area
+  await chrome.mouse.move(tab.x + tab.width + 400, 300);
+  await waitFor(() => inMain(h, (vz) => vz.focused().tip.attached), (a) => a === false);
 });

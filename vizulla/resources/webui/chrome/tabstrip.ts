@@ -1,5 +1,5 @@
-// <vz-tabstrip>: Chrome-style tabs on top (the default layout).
-// Rounded-top tabs, the active one merging into the toolbar, separators, groups as
+// <vz-tabstrip>: tabs on top (the default layout), on the same glass as the toolbar.
+// The current tab is a soft pill (no separators or joins), groups as
 // colored chips, pinned icon tabs, Spaces as colored dots, "+" and tab search.
 // Cmd/Ctrl/Shift-click selects several tabs; tabs drag between windows or out
 // into a new one.
@@ -30,13 +30,15 @@ export class VzTabstrip extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; align-items: flex-end; height: 40px; padding: 0 6px; background: var(--vz-frame-bg, var(--vz-frame)); -webkit-app-region: drag; }
+      :host { display: flex; align-items: flex-end; height: 40px; padding: 0 6px; -webkit-app-region: drag; }
       /* Every control shares the tabs' centre line: 23px down a 40px strip (34px tabs on the bottom edge). */
       .lead, .trail { display: flex; align-items: flex-end; gap: 2px; height: 100%; padding-bottom: 3px; -webkit-app-region: no-drag; flex: none; }
       .lead { padding-left: var(--traffic, 0); padding-right: 6px; }
-      .dot { width: 24px; height: 24px; padding: 0; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .dot { width: 24px; height: 24px; padding: 0; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), box-shadow var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .dot:hover { background: var(--vz-tab-hover); color: var(--c); }
-      .dot.on { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
+      /* The current Space: its colour, a soft fill and a ring, readable on glass in both themes. */
+      .dot.on { background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
+      @keyframes vz-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .dot:active { transform: scale(0.92); }
       /* Tabs shrink to icons, then the strip scrolls (padding leaves room for the active tab's feet). */
       .tabs { display: flex; flex: 0 1 auto; min-width: 0; height: 34px; align-items: flex-end; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
@@ -60,19 +62,16 @@ export class VzTabstrip extends LitElement {
       .tabs.drop-end { box-shadow: inset -2px 0 0 var(--vz-accent); }
       .tab.selected:not(.active) .body { background: var(--vz-accent-soft); color: var(--vz-text); }
       .tab.selected.active .body { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--vz-accent) 45%, transparent); }
-      /* separators between inactive tabs */
-      .tab::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 1px; background: var(--vz-border-strong); opacity: .8; }
-      .tab:first-child::before, .tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before { opacity: 0; }
       .tab .body { all: unset; box-sizing: border-box; flex: 1; min-width: 0; height: 28px; margin: 3px 4px 3px 6px; padding: 0 6px; display: flex; align-items: center; gap: 8px;
         border-radius: 8px; cursor: default; color: var(--vz-text-2); font-size: var(--vz-text-s); transition: background var(--vz-dur); }
       .tab:not(.active):hover .body { background: var(--vz-tab-hover); color: var(--vz-text); }
       .tab .body:focus-visible { outline: 2px solid var(--vz-focus); }
-      .tab.active { background: var(--vz-toolbar-bg, var(--vz-toolbar)); z-index: 1; }
+      .tab.active { z-index: 1; }
+      /* The current tab: a soft pill on the shared surface, the same shape as the address field.
+         Switching tabs, it eases in behind the text (text and layout never move). */
+      .tab.active::after { content: ''; position: absolute; inset: 3px 2px 3px 4px; z-index: -1; border-radius: 10px; background: color-mix(in srgb, var(--vz-text) 9%, transparent); box-shadow: var(--vz-glass-edge, 0 0 transparent); pointer-events: none; animation: pill-in 220ms var(--vz-ease); }
+      @keyframes pill-in { from { opacity: 0; transform: scale(.96); } }
       .tab.active .body { color: var(--vz-text); }
-      /* the curved "feet" joining the active tab to the toolbar */
-      .tab.active::after, .tab.active .foot { content: ''; position: absolute; bottom: 0; width: 10px; height: 10px; pointer-events: none; }
-      .tab.active::after { right: -10px; background: radial-gradient(circle at 100% 0, transparent 9.5px, var(--vz-toolbar-bg, var(--vz-toolbar)) 10px); }
-      .tab.active .foot { left: -10px; background: radial-gradient(circle at 0 0, transparent 9.5px, var(--vz-toolbar-bg, var(--vz-toolbar)) 10px); }
       .tab.pinned .body { justify-content: center; padding: 0; margin: 3px; }
       .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; mask-image: linear-gradient(90deg, #000 85%, transparent); }
       .fav { width: 16px; height: 16px; display: grid; place-items: center; flex: none; position: relative; }
@@ -92,6 +91,8 @@ export class VzTabstrip extends LitElement {
       .group.collapsed { opacity: .75; }
       .tab.in-group .body { box-shadow: inset 0 -2px 0 var(--g); border-radius: 8px 8px 2px 2px; }
       .add, .search { -webkit-app-region: no-drag; width: 28px; height: 28px; border-radius: 50%; }
+      .add .vz-icon { transition: transform 260ms cubic-bezier(.34,1.56,.64,1); }
+      .add:hover .vz-icon { transform: rotate(90deg); }
       .search { margin-left: 4px; position: relative; }
       /* With hidden tabs, tab search becomes a "31 ⌄" pill: how many tabs, one click to find any. */
       .search.counted { width: auto; padding: 0 6px 0 10px; gap: 2px; display: inline-flex; align-items: center; border-radius: 999px; background: var(--vz-tab-hover); animation: vz-rise 200ms var(--vz-ease); }
@@ -182,7 +183,6 @@ export class VzTabstrip extends LitElement {
         @drop=${(e: DragEvent) => (e.stopPropagation(), this.onDrop(e, i, x.id))}
         @auxclick=${(e: MouseEvent) => e.button === 1 && this.close(e, x.id)}
         @contextmenu=${(e: MouseEvent) => (e.preventDefault(), shell.showTabMenu(x.id, { x: e.clientX, y: e.clientY }, this.sel.has(x.id) ? this.sel.targets(x.id, order) : undefined))}>
-        ${active ? html`<span class="foot"></span>` : nothing}
         <button class="body" role="tab" aria-selected=${active || selected} title=${x.displayUrl ? `${x.title}\n${x.displayUrl}` : x.title} aria-label=${x.title + (x.audible ? `, ${t('tab_playing_audio')}` : '')}
           @click=${(e: MouseEvent) => this.sel.click(e, x.id, order, s.activeTabId) || shell.activateTab(x.id)}>
           <span class="fav ${x.loading ? 'loading' : ''} ${x.discarded ? 'asleep' : ''}">${favicon(x, 16)}</span>

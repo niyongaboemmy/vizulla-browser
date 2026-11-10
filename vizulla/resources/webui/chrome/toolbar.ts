@@ -32,14 +32,15 @@ export class VzToolbar extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; align-items: center; gap: 2px; height: 46px; color: var(--vz-text-2); padding: 0 10px; background: var(--vz-toolbar-bg, var(--vz-toolbar)); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 1px 0 var(--vz-border); position: relative; z-index: 1; }
+      :host { display: flex; align-items: center; gap: 2px; height: 46px; color: var(--vz-text-2); padding: 0 10px; position: relative; z-index: 1; }
       :host([mode='compact']) { -webkit-app-region: drag; }
       :host > * { -webkit-app-region: no-drag; }
       .icon-btn { width: 34px; height: 34px; border-radius: 50%; }
       .omni { flex: 1; display: flex; align-items: center; gap: 6px; height: 36px; margin: 0 8px; padding: 0 6px 0 4px; min-width: 0;
-        border-radius: 999px; background: var(--vz-omnibox); transition: background var(--vz-dur), box-shadow var(--vz-dur); }
+        border-radius: 999px; background: var(--vz-omnibox-bg, var(--vz-omnibox)); transition: background var(--vz-dur), box-shadow 240ms var(--vz-ease); }
       .omni:hover { background: var(--vz-omnibox-hover); }
-      .omni:focus-within { background: var(--vz-toolbar); box-shadow: 0 0 0 2px var(--vz-accent); }
+      /* Focus: the field turns solid and a soft accent glow spreads around it. */
+      .omni:focus-within { background: var(--vz-toolbar); box-shadow: 0 0 0 2px var(--vz-accent), 0 0 0 6px color-mix(in srgb, var(--vz-accent) 16%, transparent); }
       .sec { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--vz-text-2); flex: none; }
       button.sec { border: 0; background: transparent; cursor: pointer; transition: background var(--vz-dur); }
       button.sec:hover { background: var(--vz-surface-hover); }

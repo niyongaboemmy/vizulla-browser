@@ -6,6 +6,7 @@
 // - `data-kbd` on the element adds a keycap (e.g. data-kbd="⌘T").
 // - Picks the first side that fits the viewport and stays clear of `avoid`
 //   rects (the shell passes the page area: web pages are drawn above it).
+//   When no side fits, an `escape` (the shell's) draws the bubble above the page.
 // The `title` moves to `data-tip` on first hover so the OS tooltip never shows;
 // elements that had no other accessible name keep it as aria-label. The bubble is
 // visual only (aria-hidden): controls already carry their names.
@@ -19,8 +20,24 @@ const GAP = 8;
 let avoid: () => DOMRect[] = () => [];
 let installed = false;
 
-export function setTooltipAvoid(fn: () => DOMRect[]): void {
+export interface TooltipEscape {
+  /** Draw this self-contained bubble document at this rect, above everything. */
+  show(rect: { x: number; y: number; width: number; height: number }, doc: string): void;
+  hide(): void;
+}
+let escape: TooltipEscape | null = null;
+
+export function setTooltipAvoid(fn: () => DOMRect[], esc?: TooltipEscape): void {
   avoid = fn;
+  escape = esc ?? null;
+}
+
+/** The bubble as a standalone document: resolved theme values, the same CSS, already "on". */
+function escapedDoc(tip: HTMLElement, side: Side): string {
+  const cs = getComputedStyle(document.documentElement);
+  const vars = ['--vz-text', '--vz-bg', '--vz-font', '--vz-font-mono', '--vz-glass-border'].map((v) => `${v}:${cs.getPropertyValue(v).trim() || 'initial'}`).join(';');
+  // No page shows through a separate view, so the glass is drawn solid.
+  return `<style>:root{${vars}}${CSS}.vz-tip{position:static;background:color-mix(in srgb,var(--vz-text,#0f172a) 94%,transparent)}</style><div class="vz-tip on" data-side="${side}">${tip.innerHTML}</div>`;
 }
 
 export function installTooltips(): void {
@@ -60,9 +77,14 @@ export function installTooltips(): void {
     return null;
   };
 
+  let escaped = false;
   const hide = (cool = false) => {
     clearTimeout(timer);
     target = null;
+    if (escaped) {
+      escaped = false;
+      escape?.hide();
+    }
     tip.classList.remove('on');
     if (cool) warmUntil = 0;
     else if (tip.dataset.shown) warmUntil = Date.now() + WARM_FOR;
@@ -109,7 +131,18 @@ export function installTooltips(): void {
     };
     const preferred = (el.dataset.tipSide as Side | undefined) ?? 'bottom';
     const order = [preferred, ...(['bottom', 'top', 'right', 'left'] as Side[]).filter((s) => s !== preferred)];
-    const side = order.find((s) => fits(pos[s])) ?? preferred;
+    const free = order.find((s) => fits(pos[s]));
+    if (!free && escape && blocked.length) {
+      // Only room over the page: draw it there, in its own view above the page.
+      blocked.length = 0;
+      const side = order.find((s) => fits(pos[s])) ?? preferred;
+      const [x, y] = pos[side];
+      escape.show({ x: Math.max(6, Math.min(vw - w - 6, x)), y: Math.max(4, y), width: w, height: h }, escapedDoc(tip, side));
+      escaped = true;
+      tip.dataset.shown = '1';
+      return;
+    }
+    const side = free ?? preferred;
     const [x, y] = pos[side];
     tip.style.left = `${Math.round(Math.max(6, Math.min(vw - w - 6, x)))}px`;
     tip.style.top = `${Math.round(Math.max(4, Math.min(vh - h - 4, y)))}px`;

@@ -140,7 +140,7 @@ export class VzOverlay extends LitElement {
       .switch[aria-checked='true']::after { transform: translateX(16px); }
       .lock-hero { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 8px 4px 4px; }
       .lock-hero h2 { margin: 6px 0 0; }
-      .lock-orb { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(160deg, #6366f1, #1e1b4b); }
+      .lock-orb { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(160deg, #3b82f6, #172554); }
       .qr-hero { display: grid; justify-items: center; gap: 12px; text-align: center; }
       .qr-hero h2 { margin: 0; }
       .qr-code { width: 220px; height: 220px; padding: 10px; border-radius: 18px; background: #fff; }

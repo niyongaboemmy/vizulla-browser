@@ -31,6 +31,18 @@ Verification: 862 unit tests (vitest), Go tests for the Gateway and sync server,
 | 4 R2 | `ai_runtime` and `memory_index` utility processes, model manager (signed manifests, hash checks), device profile, Memory (opt-in, encrypted, hybrid recall, deletion follows history), Notes, NL commands + Ask Settings, intent chips, AI tab grouping, E2EE sync (Go server), fingerprinting protection, cookie-banner reject, rw/sw drafts | `phase4_r2.e2e.ts` |
 | 5–6 R3 | Plan validator, deterministic Policy Enforcer (322-case model-free attack suite, 100% green), isolated agent session + egress filter, CDP actuator, heuristic + LLM planners, advisory injection detector, control bar, Esc kill switch, login-page stop, Action Log, build-staleness gating, Stage B confirmations (exact destination/fields, delayed arming), PII handles, egress content matching, session grants | `policy_enforcer.test.ts`, `phase5_6_agent.e2e.ts` |
 
+## 2d. 0.4.2
+
+| Area | Shipped |
+|------|---------|
+| Ad blocking | Full filter lists bundled with the app (EasyList, EasyPrivacy, uBlock Origin filters/privacy/badware/quick fixes, Peter Lowe) plus uBO resources, compiled at build time (`tools/shields_bundle.mjs`; release builds refuse to ship without them). Scriptlets injected before page scripts (YouTube/pre-roll ads); generic element hiding driven by the classes/ids/links on the page; `$popup` and page-initiated `$document` rules; Chrome's popup rule (a tab only right after a real click or key, one per gesture) with a "Pop-up blocked — Open" toast; regional Rwanda rules (IGIHE) |
+| Speed | Same-site hover prefetch through Speculation Rules (state-changing links excluded; never other sites or private windows), V8 code cache on first visit |
+| Screenshots | "Visible area" and "Whole page"; whole page scrolls and stitches (lazy content loads, fixed/sticky elements once, inner scrollers, scrollbars hidden, position restored), DevTools capture as fallback |
+| Fonts | Sites always keep their own fonts; Settings → Appearance sets fonts for pages without one, and a minimum size |
+| UI | Tab tooltips that don't fit in the chrome are drawn in a small view above the page (`ui/tip_view.ts`); one glass surface for tabs, toolbar, sidebar and panels (`under-window` vibrancy, sheen and edge highlight, no separator lines); the current tab is a pill like the address field; palette without violet (`indigo` renders as Vizulla blue, `violet` as coral; stored keys unchanged); Space buttons with a ring and a spring when switching, "+" turns on hover, the address field glows on focus (all off with Reduce Motion) |
+
+Tests: `phase16_privacy.e2e.ts`, updated `phase1`/`phase3`/`phase12`.
+
 ## 2c. Since 0.4.0
 
 | Area | Shipped |

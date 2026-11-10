@@ -1,13 +1,20 @@
 // Web pages (every frame of web sessions): one synchronous call for the page's
 // settings, then (1) navigator.language(s) report the browser's chosen language,
-// matching Accept-Language, and (2) fingerprinting protection (P4-BRW-10, SHD-03)
-// adds tiny deterministic per-site noise to canvas, audio and WebGL readouts.
+// matching Accept-Language, (2) fingerprinting protection (P4-BRW-10, SHD-03)
+// adds tiny deterministic per-site noise to canvas, audio and WebGL readouts, and
+// (3) Shields scriptlets (video and pre-roll ads) run before the page's own scripts.
+// Real clicks and key presses are reported so pages can open tabs only right after
+// one, like Chrome's popup blocker (shields/platform_features.ts).
 // One call instead of one per feature: each blocks the frame while it starts.
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webFrame } from 'electron';
+import { DOMMonitor } from '@ghostery/adblocker-content';
 
 interface PageConfig {
   langs: string[];
   farble: { level: 'off' | 'standard' | 'strict'; seed: number };
+  scripts?: string[];
+  preload?: boolean;
+  cosmetic?: boolean;
 }
 
 if (/^https?:$/.test(location.protocol)) {
@@ -17,6 +24,44 @@ if (/^https?:$/.test(location.protocol)) {
   } catch {
     /* no config: leave the page alone */
   }
+  // Privileged injection: runs in the page's world before its scripts, and a site's CSP can't stop it.
+  if (Array.isArray(cfg.scripts) && cfg.scripts.length) void webFrame.executeJavaScript(cfg.scripts.join('\n;\n')).catch(() => undefined);
+  // Instant navigation: Chromium's own preloading (Speculation Rules) fetches a link on this
+  // site when the pointer rests on it (~200 ms) or presses it. Links that change state
+  // (sign out, delete, unsubscribe, add to cart…) and downloads are never fetched early.
+  if (cfg.preload) {
+    const rules = JSON.stringify({
+      prefetch: [{
+        source: 'document',
+        where: { and: [{ href_matches: '/*' }, { not: { selector_matches: '[href*="logout" i], [href*="log-out" i], [href*="signout" i], [href*="sign-out" i], [href*="logoff" i], [href*="delete" i], [href*="remove" i], [href*="unsubscribe" i], [href*="cart" i], [href*="checkout" i], [href*="action=" i], [rel~="nofollow"], [download]' } }] },
+        eagerness: 'moderate',
+      }],
+    });
+    void webFrame.executeJavaScript(`(() => {
+      const add = () => { const s = document.createElement('script'); s.type = 'speculationrules'; s.textContent = ${JSON.stringify(rules)}; (document.head || document.documentElement).append(s); };
+      document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', add, { once: true }) : add();
+    })()`).catch(() => undefined);
+  }
+  // Element hiding: report the classes, ids and links in use (as the page changes) and
+  // apply the matching hiding rules as user styles, which beat the page's own.
+  if (cfg.cosmetic) {
+    const monitor = new DOMMonitor((u) => {
+      if (u.type !== 'features' || (!u.classes.length && !u.ids.length && !u.hrefs.length)) return;
+      void ipcRenderer.invoke('vz:cosmetic', { classes: u.classes, ids: u.ids, hrefs: u.hrefs }).then((css: string) => css && webFrame.insertCSS(css, { cssOrigin: 'user' })).catch(() => undefined);
+    });
+    const start = () => {
+      monitor.queryAll(window);
+      monitor.start(window);
+    };
+    document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start, { once: true }) : start();
+  }
+  let lastSent = 0;
+  const activation = (e: Event) => {
+    if (!e.isTrusted || e.timeStamp - lastSent < 200) return;
+    lastSent = e.timeStamp;
+    ipcRenderer.send('vz:activation');
+  };
+  for (const type of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(type, activation, { capture: true, passive: true });
   if (Array.isArray(cfg.langs) && cfg.langs.length) {
     contextBridge.executeInMainWorld({
       func: (list: string[]) => {

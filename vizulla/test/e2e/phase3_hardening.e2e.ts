@@ -111,7 +111,14 @@ test('security invariants: sandboxed renderers, no node, CSP on internal pages, 
   expect(inline).toBe(0);
   // window.open from a web page becomes a tab, never a native window.
   const web = await page(h, `${h.base}/`);
-  await web.evaluate(() => window.open('/article', '_blank'));
+  await web.evaluate(() => {
+    const b = document.createElement('button');
+    b.id = 'pop';
+    b.textContent = 'Open';
+    b.onclick = () => window.open('/article', '_blank');
+    document.body.append(b);
+  });
+  await web.click('#pop'); // a real click: pages may open tabs only right after one
   await waitFor(() => inMain(h, (vz) => vz.focused().tabs.size), (n) => n === 3);
   const natives = await inMain(h, (_vz, _a, electron) => electron.BrowserWindow.getAllWindows().length);
   expect(natives).toBe(0);
@@ -177,7 +184,7 @@ test('signed filter lists: a signed update is accepted and swapped in; a tampere
     h = await launch({ env: { VZ_SHIELDS_LIST_URL: url } });
     await h.chrome();
     expect(await inMain(h, (vz) => vz.profile.shields.updateLists())).toBe('rejected-hash-mismatch');
-    expect(await inMain(h, (vz) => vz.profile.shields.status(-1, '').ruleSource)).toBe('baseline');
+    expect(await inMain(h, (vz) => vz.profile.shields.status(-1, '').ruleSource)).toBe('bundled');
     tamper = false;
     expect(await inMain(h, (vz) => vz.profile.shields.updateLists())).toBe('updated');
     expect(await inMain(h, (vz) => vz.profile.shields.status(-1, '').ruleSource)).toBe('signed');

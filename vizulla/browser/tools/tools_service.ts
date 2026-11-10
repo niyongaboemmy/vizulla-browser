@@ -8,6 +8,7 @@ import type { BrowserApp } from '../browser_app';
 import type { BrowserWindowController } from '../ui/browser_window';
 import { t } from '@vz/common/i18n';
 import { detect, pageProbe, probeTargets, type Detected } from './tech/detect';
+import { captureFullPage } from './full_page_capture';
 
 const safeName = (s: string) => s.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Vizulla';
 const stamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '.');
@@ -58,20 +59,9 @@ export class ToolsService {
     const wc = tab.wc;
     let img: Electron.NativeImage;
     if (full) {
-      // Whole page through the DevTools protocol (beyond the viewport, capped at 16k px).
-      const attached = wc.debugger.isAttached();
-      try {
-        if (!attached) wc.debugger.attach('1.3');
-        const m = (await wc.debugger.sendCommand('Page.getLayoutMetrics')) as { cssContentSize: { width: number; height: number } };
-        const width = Math.ceil(m.cssContentSize.width);
-        const height = Math.min(16384, Math.ceil(m.cssContentSize.height));
-        const shot = (await wc.debugger.sendCommand('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width, height, scale: 1 } })) as { data: string };
-        img = nativeImage.createFromBuffer(Buffer.from(shot.data, 'base64'));
-      } catch {
-        img = await wc.capturePage();
-      } finally {
-        if (!attached && wc.debugger.isAttached()) wc.debugger.detach();
-      }
+      // Scroll and stitch (lazy content loads, sticky headers show once); the DevTools
+      // beyond-the-viewport capture is the fallback.
+      img = (await captureFullPage(wc).catch((e) => (console.warn('[vz] scrolling screenshot failed', e), null))) ?? (await this.captureBeyondViewport(wc));
     } else {
       img = await wc.capturePage();
     }
@@ -88,6 +78,22 @@ export class ToolsService {
     void clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(img.toPNG())], { type: 'image/png' }) })]).catch(() => undefined);
     this.saved(w, t('tool_screenshot_saved'), file);
     return file;
+  }
+
+  private async captureBeyondViewport(wc: Electron.WebContents): Promise<Electron.NativeImage> {
+    const attached = wc.debugger.isAttached();
+    try {
+      if (!attached) wc.debugger.attach('1.3');
+      const m = (await wc.debugger.sendCommand('Page.getLayoutMetrics')) as { cssContentSize: { width: number; height: number } };
+      const width = Math.ceil(m.cssContentSize.width);
+      const height = Math.min(16384, Math.ceil(m.cssContentSize.height));
+      const shot = (await wc.debugger.sendCommand('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width, height, scale: 1 } })) as { data: string };
+      return nativeImage.createFromBuffer(Buffer.from(shot.data, 'base64'));
+    } catch {
+      return wc.capturePage();
+    } finally {
+      if (!attached && wc.debugger.isAttached()) wc.debugger.detach();
+    }
   }
 
   async savePdf(w: BrowserWindowController): Promise<string | null> {

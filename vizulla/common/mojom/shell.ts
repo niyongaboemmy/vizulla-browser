@@ -27,6 +27,9 @@ export const ShellInterface = defineInterface('Shell', {
   showTabMenu: [tabId, v.optional(point), v.optional(v.array(tabId, { max: 500 }))],
   showPasswordMenu: [tabId, v.optional(point)],
   showProfileMenu: [v.optional(point)],
+  /** A tooltip that doesn't fit in the chrome: drawn above the page (ui/tip_view.ts). */
+  showTip: [rect, v.string({ max: 20000 })],
+  hideTip: [],
   /** Tabs dragged out of the strip: open them in a new window at the screen point. */
   detachTabs: [v.array(tabId, { max: 500 }), v.optional(point)],
   /** Tabs dragged in from another window's strip: insert at this visible index. */

@@ -31,7 +31,7 @@ export class VzSidebar extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: flex; flex-direction: column; height: 100vh; min-width: 0; padding: 0 8px 8px 8px; position: relative; background: var(--vz-frame-bg, var(--vz-frame)); }
+      :host { display: flex; flex-direction: column; height: 100vh; min-width: 0; padding: 0 8px 8px 8px; position: relative; }
       .top { display: flex; align-items: center; gap: 2px; height: 44px; padding-left: var(--traffic, 0px); -webkit-app-region: drag; }
       .top > * { -webkit-app-region: no-drag; }
       .top .spacer { flex: 1; }
@@ -59,7 +59,7 @@ export class VzSidebar extends LitElement {
         cursor: pointer; position: relative; transition: background var(--vz-dur), transform var(--vz-dur) var(--vz-ease);
       }
       .pin:hover { background: var(--vz-surface-hover); }
-      .pin.active { background: var(--vz-bg-elev); border-color: var(--vz-glass-border); }
+      .pin.active { background: color-mix(in srgb, var(--vz-text) 9%, transparent); border-color: transparent; }
       .pin img, .pin .vz-icon { width: 20px; height: 20px; }
       .pin .dot { position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--vz-accent); }
       .pinned.drop { outline: 2px dashed var(--vz-accent); outline-offset: 2px; border-radius: var(--vz-radius); }
@@ -79,7 +79,8 @@ export class VzSidebar extends LitElement {
       }
       :host-context([data-density=compact]) .tab { --row-h: 28px; }
       .tab:hover { background: var(--vz-surface-hover); }
-      .tab.active { background: var(--vz-bg-elev); box-shadow: 0 0 0 1px var(--vz-glass-border); }
+      /* Same pill as the top tab strip: no card, no border. */
+      .tab.active { background: color-mix(in srgb, var(--vz-text) 9%, transparent); box-shadow: var(--vz-glass-edge, 0 0 transparent); }
       .tab:focus-visible { outline: 2px solid var(--vz-focus); outline-offset: -2px; }
       .tab.discarded .title, .tab.discarded img { opacity: 0.55; }
       .tab.dragging { opacity: 0.4; }
@@ -103,11 +104,12 @@ export class VzSidebar extends LitElement {
       .group-body { padding-inline-start: 10px; border-inline-start: 2px solid var(--gcolor); margin-inline-start: 7px; }
       .group.drop .group-body { background: color-mix(in srgb, var(--gcolor) 8%, transparent); border-radius: 0 var(--vz-radius-s) var(--vz-radius-s) 0; }
 
-      .footer { display: flex; align-items: center; gap: 2px; padding-top: 6px; border-top: 1px solid var(--vz-border); }
+      .footer { display: flex; align-items: center; gap: 2px; padding-top: 8px; }
       .spaces { flex: 1; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-      .space-btn { width: 30px; height: 30px; border-radius: 50%; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); position: relative; flex: none; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .space-btn { width: 30px; height: 30px; border-radius: 50%; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2); position: relative; flex: none; transition: background var(--vz-dur), color var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
       .space-btn:hover { background: var(--vz-surface-hover); color: var(--vz-text); }
-      .space-btn.active { color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+      .space-btn.active { color: var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
+      @keyframes vz-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .space-btn.drop { transform: scale(1.18); background: color-mix(in srgb, var(--c) 26%, transparent); color: var(--c); }
       .meta { display: flex; gap: 6px; padding: 4px 6px 0; font-size: var(--vz-text-xs); color: var(--vz-text-3); }
       .meta button { border: 0; background: transparent; color: inherit; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; padding: 2px 4px; border-radius: 999px; font-size: inherit; }

@@ -56,6 +56,11 @@ const PAGES: Record<string, string> = {
     const c = document.getElementById('c'); const x = c.getContext('2d');
     x.fillStyle = '#f60'; x.fillRect(10, 10, 100, 40); x.fillStyle = '#069'; x.font = '18px Arial'; x.fillText('Vizulla fp', 20, 35);
     window.__fp = c.toDataURL();</script>`,
+  '/long': `<!doctype html><title>Long page</title><style>body{margin:0;font:16px sans-serif}header{position:fixed;top:0;left:0;right:0;height:40px;background:#036;color:#fff}section{height:600px;border-bottom:4px solid #999;padding-top:48px}</style>
+    <header>Fixed header</header>${Array.from({ length: 8 }, (_, i) => `<section id="s${i}">Section ${i}</section>`).join('')}`,
+  '/pop': `<!doctype html><title>Popup test</title><button id="go">Go</button><script>
+    document.getElementById('go').onclick = () => window.open('/article', '_blank');
+    window.openLater = () => setTimeout(() => window.open('/article', '_blank'), 50);</script>`,
   '/pdf': '',
 };
 

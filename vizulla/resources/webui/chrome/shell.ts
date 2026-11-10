@@ -40,7 +40,8 @@ export class VzShell extends LitElement {
   static override styles = [
     base,
     css`
-      :host { display: grid; height: 100vh; overflow: hidden; user-select: none; background: var(--vz-frame-bg, var(--vz-frame)); }
+      /* One surface: tabs, toolbar, sidebar and panels sit on the same glass, with no lines between them. */
+      :host { display: grid; height: 100vh; overflow: hidden; user-select: none; background-color: var(--vz-chrome-bg, var(--vz-toolbar)); background-image: var(--vz-glass-sheen, none); }
       :host([layout='vertical']) { grid-template-columns: auto 1fr auto; }
       :host([layout='horizontal']) { grid-template-rows: auto auto auto 1fr; grid-template-columns: 1fr auto; }
       :host([layout='horizontal']) vz-tabstrip, :host([layout='horizontal']) vz-toolbar, :host([layout='horizontal']) .bookmarks { grid-column: 1 / -1; }
@@ -49,12 +50,11 @@ export class VzShell extends LitElement {
       :host([layout='horizontal']) vz-toolbar { grid-row: 2; }
       :host([layout='horizontal']) .bookmarks { grid-row: 3; }
       :host([layout='horizontal']) .main, :host([layout='horizontal']) .panel-host { grid-row: 4; }
-      .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; background: var(--vz-toolbar-bg, var(--vz-toolbar)); }
+      .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
       /* The page gets every pixel: no inset, no rounded frame. */
       .frame-wrap { flex: 1; display: flex; gap: 2px; min-height: 0; background: var(--vz-border); }
       .frame { flex: 1; min-width: 0; background: transparent; position: relative; }
       .frame.split-active { box-shadow: inset 0 2px 0 var(--vz-accent); }
-      :host([layout='vertical']) .main { box-shadow: -1px 0 0 var(--vz-border); }
       .strip {
         display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 8px 0 14px; flex: none;
         background: var(--vz-glass-strong); backdrop-filter: blur(20px) saturate(160%); box-shadow: 0 1px 0 var(--vz-border); animation: slide 180ms var(--vz-ease);
@@ -68,7 +68,7 @@ export class VzShell extends LitElement {
       .agent-bar .step { font-variant-numeric: tabular-nums; color: var(--vz-text-2); font-weight: 600; font-size: 12px; }
       .agent-bar .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--vz-accent); animation: pulse 1.4s ease-in-out infinite; flex: none; }
       @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
-      .panel-host { display: flex; background: var(--vz-toolbar-bg, var(--vz-toolbar)); box-shadow: -1px 0 0 var(--vz-border); }
+      .panel-host { display: flex; }
       .resize { width: 6px; cursor: col-resize; position: relative; z-index: 2; margin: 0 -3px; }
       .resize::after { content: ''; position: absolute; inset: 30% 3px; border-radius: 2px; background: transparent; transition: background var(--vz-dur); }
       .resize:hover::after, .resize.active::after { background: var(--vz-border-strong); }
@@ -89,7 +89,10 @@ export class VzShell extends LitElement {
     void shell.getState().then((s: WindowState) => this.apply(s));
     installTooltips();
     // Web pages are drawn above the page area, so tooltips must stay off it.
-    setTooltipAvoid(() => [...this.renderRoot.querySelectorAll('#content, #split')].map((el) => el.getBoundingClientRect()));
+    setTooltipAvoid(() => [...this.renderRoot.querySelectorAll('#content, #split')].map((el) => el.getBoundingClientRect()), {
+      show: (r, doc) => void shell.showTip(r, doc),
+      hide: () => void shell.hideTip(),
+    });
     window.addEventListener('resize', () => {
       this.vw = window.innerWidth;
       this.reportBounds();
@@ -108,11 +111,18 @@ export class VzShell extends LitElement {
       this.lastLocale = s.locale;
     }
     applyTheme(s.theme, s.accent, s.density);
-    // macOS: the frame and toolbar are translucent so the window's vibrancy shows through (glass).
+    // Glass (macOS vibrancy, Windows Mica): the whole chrome is one light tint over the blurred
+    // desktop, like iOS materials; a hairline highlight marks the glass edge.
     if (s.glass) {
       const root = document.documentElement.style;
-      root.setProperty('--vz-frame-bg', 'color-mix(in srgb, var(--vz-frame) 45%, transparent)');
-      root.setProperty('--vz-toolbar-bg', 'color-mix(in srgb, var(--vz-toolbar) 70%, transparent)');
+      root.setProperty('--vz-chrome-bg', 'color-mix(in srgb, var(--vz-toolbar) 46%, transparent)');
+      root.setProperty('--vz-glass-edge', 'inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent)');
+      // Light catching the top of the glass, and a field you can see the glass through.
+      root.setProperty('--vz-glass-sheen', 'linear-gradient(180deg, color-mix(in srgb, #fff 12%, transparent), transparent 70%)');
+      root.setProperty('--vz-omnibox-bg', 'color-mix(in srgb, var(--vz-omnibox) 72%, transparent)');
+    } else {
+      const root = document.documentElement.style;
+      for (const k of ['--vz-chrome-bg', '--vz-glass-edge', '--vz-glass-sheen', '--vz-omnibox-bg']) root.removeProperty(k);
     }
     this.state = s;
     this.setAttribute('layout', s.layout);

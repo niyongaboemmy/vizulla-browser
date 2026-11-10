@@ -13,6 +13,7 @@ import { TabStripModel } from '../tabs/tab_strip_model';
 import { logicalUrl, WebTab, type WebTabOptions } from '../tabs/web_tab';
 import type { NavState, SessionWindow } from '../spaces/spaces_service';
 import { OverlayController } from './overlay';
+import { TipView } from './tip_view';
 import { emitTo } from './ipc_router';
 import { buildPageContextMenu } from './context_menu';
 import { classifyInput, displayUrl, searchUrl, siteOf } from '@vz/common/url';
@@ -60,6 +61,7 @@ export class BrowserWindowController extends EventEmitter {
   readonly win: BaseWindow;
   readonly chrome: WebContentsView;
   readonly overlay: OverlayController;
+  readonly tip: TipView;
   readonly model: TabStripModel;
   readonly tabs = new Map<number, WebTab>();
   private contentRect: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -87,10 +89,12 @@ export class BrowserWindowController extends EventEmitter {
       show: false,
       title: profile.isPrivate ? 'Vizulla — Private' : 'Vizulla',
       // macOS: transparent, so the window's vibrancy (frosted glass) shows through the translucent chrome.
+      // 'under-window' is the most see-through material (the desktop shows, heavily blurred), like iOS glass;
+      // with Reduce Transparency on, macOS draws it solid by itself.
       // Windows 11: the same with Mica. Older Windows and Linux keep a solid frame.
       backgroundColor: hasGlass ? '#00000000' : windowBackground(this.resolvedTheme()),
       ...(isMac
-        ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'sidebar', visualEffectState: 'followWindow' }
+        ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, vibrancy: 'under-window', visualEffectState: 'followWindow' }
         : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#eef1f6' : '#0f172a', height: 40 }, ...(hasMica ? { backgroundMaterial: 'mica' } : {}) }),
     } as Electron.BaseWindowConstructorOptions);
     this.chrome = new WebContentsView({
@@ -107,6 +111,7 @@ export class BrowserWindowController extends EventEmitter {
     this.chrome.setBackgroundColor('#00000000');
     this.win.contentView.addChildView(this.chrome);
     this.overlay = new OverlayController(this.win, app.preloadPath, () => app.chromeSession);
+    this.tip = new TipView(this.win, () => app.chromeSession);
     this.overlay.onClosed = (surface) => {
       if (surface?.kind === 'command-bar') this.focusActive();
     };
@@ -577,6 +582,8 @@ export class BrowserWindowController extends EventEmitter {
       else this.splitTabId = null;
     }
     for (const v of this.attachedViews) if (!want.has(v)) this.detachView(v);
+    // The tip view is always topmost; take it down so the indexes below stay right.
+    if ([...want].some((v) => !this.attachedViews.has(v))) this.tip.hide();
     for (const v of want) {
       if (!this.attachedViews.has(v)) {
         // Tabs stack above the chrome view and below an open overlay. Never pass
@@ -803,6 +810,7 @@ export class BrowserWindowController extends EventEmitter {
     for (const tab of this.tabs.values()) tab.destroy();
     this.tabs.clear();
     this.overlay.destroy();
+    this.tip.destroy();
     if (!this.chrome.webContents.isDestroyed()) this.chrome.webContents.close();
     this.app.onWindowClosed(this);
   }

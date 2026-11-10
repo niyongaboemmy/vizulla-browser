@@ -27,7 +27,7 @@ export interface ShieldsStatus {
   site: string;
   blocked: { ads: number; trackers: number; other: number; total: number };
   engineVersion: number;
-  ruleSource: 'baseline' | 'signed';
+  ruleSource: 'baseline' | 'bundled' | 'signed';
 }
 
 const UPDATE_INTERVAL_MS = 24 * 3600_000;
@@ -35,7 +35,7 @@ const UPDATE_INTERVAL_MS = 24 * 3600_000;
 export class ShieldsService extends EventEmitter {
   private engine: ShieldsEngine;
   private engineVersion = 0;
-  private ruleSource: 'baseline' | 'signed' = 'baseline';
+  private ruleSource: 'baseline' | 'bundled' | 'signed' = 'baseline';
   /** Per-tab, per-page counts. Reset on top-level navigation. */
   private readonly counts = new Map<number, { ads: number; trackers: number; other: number }>();
   /** Hosts where HTTPS failed and the user continued on HTTP (HTTPS-First fallback). */
@@ -138,7 +138,15 @@ export class ShieldsService extends EventEmitter {
       name: 'shields',
       priority: 20,
       onBeforeRequest: (d) => {
-        if (!this.isEnabled || d.resourceType === 'mainFrame') return null;
+        if (!this.isEnabled) return null;
+        if (d.resourceType === 'mainFrame') {
+          // A page sending the tab to an ad network (tab-unders, ad redirects). Never what the
+          // user typed or bookmarked: those have no referrer.
+          const from = d.referrer || '';
+          if (!from.startsWith('http') || !isCrossSite(d.url, from) || !this.isSiteEnabled(from) || this.adsAllowed(from)) return null;
+          const r = this.engine.check(d.url, from, 'mainFrame');
+          return r.block && !r.redirect ? { cancel: true, reason: 'shields-document' } : null;
+        }
         const pageUrl = initiatorOf(d);
         if (!pageUrl.startsWith('http') || !this.isSiteEnabled(pageUrl)) return null;
         // Hyperlink auditing (<a ping>) and beacons to other sites exist only to track clicks.
@@ -158,6 +166,11 @@ export class ShieldsService extends EventEmitter {
     });
     // Third-party cookies (SHD-04) and Global Privacy Control are native Chromium features
     // (see app/main.ts): no per-request header hooks.
+  }
+
+  /** A block decided outside the request path (e.g. a popup): counted in the shield badge. */
+  countBlocked(webContentsId: number, category: RequestCategory): void {
+    this.count(webContentsId, category);
   }
 
   private count(webContentsId: number, category: RequestCategory): void {
@@ -225,7 +238,37 @@ export class ShieldsService extends EventEmitter {
         console.warn('[vz] cached Shields engine unreadable', e);
       }
     }
+    // The full engine shipped with the app (tools/shields_bundle.mjs): EasyList, EasyPrivacy,
+    // uBlock Origin's lists and resources. Part of the signed app, so no list signature.
+    const bundled = join(this.resourcesDir, 'shields', 'engine.bin');
+    if (existsSync(bundled) && !process.env.VZ_SHIELDS_BASELINE) {
+      try {
+        const e = ShieldsEngine.deserialize(readFileSync(bundled));
+        this.ruleSource = 'bundled';
+        return e;
+      } catch (e) {
+        console.warn('[vz] bundled Shields engine unreadable; using baseline', e);
+      }
+    }
     return ShieldsEngine.fromLists([readFileSync(join(this.resourcesDir, 'shields', 'baseline.txt'), 'utf8')]);
+  }
+
+  /** Element hiding for the classes/ids/links a frame reports (page_preload.ts). */
+  cosmeticFor(frameUrl: string, topUrl: string, f: { classes: string[]; ids: string[]; hrefs: string[] }): string {
+    if (!/^https?:/.test(frameUrl) || !this.isSiteEnabled(topUrl) || this.adsAllowed(topUrl)) return '';
+    return this.engine.domCosmetic(frameUrl, f);
+  }
+
+  /** Scriptlets for a frame, run by page_preload.ts before the page's own scripts. */
+  scriptsFor(frameUrl: string, topUrl: string): string[] {
+    if (!/^https?:/.test(frameUrl) || !this.isSiteEnabled(topUrl) || this.adsAllowed(topUrl)) return [];
+    return this.engine.scripts(frameUrl);
+  }
+
+  /** A popup the filter lists block ($popup rules: popunder and ad networks). */
+  blocksPopup(url: string, openerUrl: string): boolean {
+    if (!this.isEnabled || !/^https?:/.test(url) || !/^https?:/.test(openerUrl) || !this.isSiteEnabled(openerUrl)) return false;
+    return this.engine.check(url, openerUrl, 'popup').block;
   }
 
   /** Fetch the signed engine; verify; swap atomically. Returns why it did or didn't update. */

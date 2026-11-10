@@ -53,6 +53,16 @@ The table reflects vendor defaults as we understand them in late 2026. Re-verify
 - **Forced Referer trimming** (overriding pages that ask for `unsafe-url`) needs an `onBeforeSendHeaders` hook on every request. That is exactly the cost 0.4.0 removed (about 19 % on request-heavy pages). Chromium's default already trims cross-site referrers, so we rely on it.
 - **Blocking all beacons**: same-site analytics and logout beacons break. We block only cross-site pings.
 
+## 3b. Shipped in 0.4.2: ads that got through
+
+Diagnosis: shipped builds carried only the 133-rule baseline (no list server in production), Electron has no popup blocker, and EasyList's generic hiding rules only apply when the engine is told which classes/ids a page uses.
+
+- **Full lists bundled**: about 6.9 MB compiled engine, loaded in about 13 ms, matching in about 7 µs per request.
+- **Video and pre-roll ads**: uBO scriptlets (json-prune and others) run through privileged injection before the page's scripts, so a site's CSP can't stop them. On YouTube, `adPlacements`, `playerAds` and `adSlots` are stripped from the player response (verified live).
+- **Popups, popunders and tab-unders**: the lists' `$popup` rules, Chrome's rule of one tab per real gesture, and `$document` rules for cross-site navigations a page starts (never typed addresses).
+- **Self-hosted banners** (e.g. IGIHE) need site rules: a regional section in `baseline.txt`.
+- **Limit**: the lists refresh with each release. YouTube changes often, so a signed list server (`VZ_SHIELDS_LIST_URL`, already supported) should come next.
+
 ## 4. Next (proposed)
 
 1. **HTTPS-Only mode**: an interstitial instead of a silent HTTP fallback, with a per-site "continue".

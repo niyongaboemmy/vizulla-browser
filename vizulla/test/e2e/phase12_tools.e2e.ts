@@ -27,7 +27,7 @@ test('the Tools menu takes screenshots and saves PDFs to Downloads', async () =>
   const ov = await overlay(h);
   const menu = ov.getByRole('menu', { name: 'Tools' });
   await expect(menu).toBeVisible();
-  await menu.getByRole('menuitem', { name: 'Screenshot', exact: true }).click();
+  await menu.getByRole('menuitem', { name: 'Screenshot of visible area', exact: true }).click();
   await expect.poll(() => readdirSync(downloads).filter((f) => f.endsWith('.png')).length).toBe(1);
   await inMain(h, (vz) => vz.runCommand(vz.focused(), 'tools.screenshotFull'));
   await expect.poll(() => readdirSync(downloads).filter((f) => f.endsWith('.png')).length).toBe(2);

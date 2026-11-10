@@ -260,6 +260,8 @@ test('tab strip: icons, close button, "+" and tab search share one centre line',
   });
   await expect(chrome.locator('vz-tabstrip').getByRole('tab')).toHaveCount(2);
   await expect(chrome.locator('vz-tabstrip').getByRole('button', { name: 'Search tabs' })).toBeVisible();
+  // Measure at rest: new tabs grow in and the current Space button springs.
+  await chrome.waitForFunction(() => document.getAnimations().every((x) => x.playState !== 'running'));
   // A new tab grows in; below 96px it shows no icon, so wait for full width.
   await chrome.waitForFunction(() => {
     const tab = document.querySelector('vz-shell')!.shadowRoot!.querySelector('vz-tabstrip')!.shadowRoot!.querySelector('.tab.active');

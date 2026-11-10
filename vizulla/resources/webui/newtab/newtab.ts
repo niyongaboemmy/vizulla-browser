@@ -67,7 +67,7 @@ class VzNewTab extends VzPage<Data> {
       .act:hover { color: var(--vz-accent); background: var(--vz-toolbar); }
       /* Private start page */
       .priv { width: min(880px, calc(100vw - 40px)); padding: 9vh 0 60px; display: grid; gap: 22px; justify-items: center; text-align: center; }
-      .priv-orb { width: 76px; height: 76px; border-radius: 24px; display: grid; place-items: center; color: #fff; background: linear-gradient(160deg, #6366f1, #312e81); animation: vz-rise 380ms var(--vz-ease); }
+      .priv-orb { width: 76px; height: 76px; border-radius: 24px; display: grid; place-items: center; color: #fff; background: linear-gradient(160deg, #3b82f6, #1e3a8a); animation: vz-rise 380ms var(--vz-ease); }
       .priv h1 { margin: 0; font-size: 30px; letter-spacing: -0.02em; }
       .priv .lead { margin: -8px 0 0; color: var(--vz-text-2); max-width: 560px; }
       .priv .bar { max-width: 584px; text-align: left; }
@@ -75,7 +75,7 @@ class VzNewTab extends VzPage<Data> {
       .col { padding: 18px; border-radius: 20px; border: 1px solid var(--vz-glass-border); background: var(--vz-glass); backdrop-filter: blur(20px) saturate(160%); animation: vz-rise 380ms var(--vz-ease) both; }
       .col h2 { margin: 0 0 10px; font-size: var(--vz-text-m); display: flex; gap: 8px; align-items: center; }
       .col ul { margin: 0; padding-left: 18px; color: var(--vz-text-2); font-size: var(--vz-text-s); line-height: 1.7; }
-      .col.on h2 { color: #a5b4fc; }
+      .col.on h2 { color: #93c5fd; }
       @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
       @media (max-width: 520px) { .tile { width: 96px; } .actions { right: 50%; transform: translateX(50%); } }
     `,

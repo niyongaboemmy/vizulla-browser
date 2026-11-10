@@ -1,9 +1,10 @@
 // R2 privacy features (Track G): fingerprinting protection config, cookie banner
 // auto-reject (P4-BRW-10/11) and WebRTC IP-leak protection. All respect Shields site exceptions.
-import { app as electronApp, webContents, type Session, type WebContents } from 'electron';
+import { app as electronApp, ipcMain, webContents, type Session, type WebContents } from 'electron';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { BrowserApp } from '../browser_app';
-import type { WebTab } from '../tabs/web_tab';
+import { WebTab } from '../tabs/web_tab';
+import { t } from '@vz/common/i18n';
 import { siteOf } from '@vz/common/url';
 import { ISOLATED_WORLD_ID } from '../ai/context/page_scripts';
 
@@ -73,6 +74,25 @@ export function installPlatformFeatures(app: BrowserApp): void {
   p.prefs.observe('shields.webrtcProtection', () => {
     for (const wc of webContents.getAllWebContents()) if (wc.getType() !== 'window') applyWebRtc(wc);
   });
+  // Popups (Chrome's rules; Electron has no popup blocker): a page opens a tab only right
+  // after a real click or key press, one per gesture, and never to a popup/popunder network.
+  const ACTIVATION_MS = 5000;
+  const activations = new WeakMap<WebContents, number>();
+  ipcMain.on('vz:activation', (e) => activations.set(e.sender, Date.now()));
+  WebTab.popupPolicy = (opener, url, disposition) => {
+    const from = opener.getURL();
+    if (!/^https?:/.test(from)) return true;
+    const listed = p.shields.blocksPopup(url, from);
+    const gesture = Date.now() - (activations.get(opener) ?? 0) < ACTIVATION_MS;
+    if (!listed && gesture) {
+      if (disposition !== 'background-tab') activations.delete(opener); // one popup per gesture
+      return true;
+    }
+    const found = app.findTabByWebContents(opener);
+    if (found && /^https?:/.test(url) && !listed) found.window.toast(t('popup_blocked'), { label: t('action_open'), run: () => found.window.loadUrl(null, url, { newTab: true }) });
+    if (opener.id !== undefined && listed) p.shields.countBlocked(opener.id, 'ads');
+    return false;
+  };
   app.hooks.windowCreated.push((w) => {
     w.on('tab-dom-ready', (tab: WebTab) => {
       if (!p.prefs.get('shields.cookieBanners') || !tab.wc || !/^https?:/.test(tab.url) || !p.shields.isSiteEnabled(tab.url)) return;

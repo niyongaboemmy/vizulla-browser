@@ -873,7 +873,7 @@
   "set_search_suggestions": "Afficher les suggestions de recherche",
   "set_search_suggestions_desc": "Pendant la saisie dans la barre d'adresse, votre moteur de recherche propose des recherches. Envoyé sans cookies, et jamais depuis les fenêtres privées.",
   "cmd_tools": "Outils",
-  "tool_screenshot": "Capture d'écran",
+  "tool_screenshot": "Capture de la zone visible",
   "tool_screenshot_full": "Capture de la page entière",
   "tool_save_pdf": "Enregistrer en PDF",
   "tool_print": "Imprimer…",
@@ -1065,5 +1065,18 @@
   "chk_links": "Liens nettoyés",
   "chk_webrtc": "IP masquée à WebRTC",
   "chk_gpc": "Signal « ne pas vendre » (GPC)",
-  "chk_telemetry": "Aucune statistique d’usage"
+  "chk_telemetry": "Aucune statistique d’usage",
+  "set_fonts": "Polices",
+  "set_fonts_desc": "Les sites gardent toujours leurs propres polices. Celles-ci ne servent que si une page n’en choisit pas.",
+  "set_font_standard": "Police standard",
+  "set_font_serif": "Police serif",
+  "set_font_sansSerif": "Police sans serif",
+  "set_font_monospace": "Police à chasse fixe",
+  "set_font_default": "Par défaut",
+  "set_font_min": "Taille de police minimale",
+  "set_font_min_desc": "Le texte des sites n’est jamais affiché plus petit. S’applique aux onglets ouverts ensuite.",
+  "set_font_min_none": "Aucune",
+  "popup_blocked": "Fenêtre pop-up bloquée",
+  "set_preload": "Précharger les pages pour une navigation instantanée",
+  "set_preload_desc": "Quand le pointeur reste sur un lien du site où vous êtes, la page se charge avant le clic. Les autres sites ne sont jamais contactés à l’avance, et les fenêtres privées ne préchargent jamais."
 }

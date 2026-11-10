@@ -3,15 +3,23 @@
 // process uses them for native surfaces (window background, view corners).
 import type { SpaceColor } from './types';
 
+// The keys are stored identifiers (Spaces, profiles, prefs), so they never change; what
+// they look like may. One family with the brand blue, and no violet: `indigo` is
+// Vizulla blue and `violet` is coral (see ACCENT_LABELS for their names).
 export const ACCENTS: Record<SpaceColor, { light: string; dark: string; soft: string; softDark: string }> = {
-  indigo: { light: '#4f46e5', dark: '#8b8cf8', soft: '#eef0ff', softDark: '#25264a' },
+  indigo: { light: '#2563eb', dark: '#60a5fa', soft: '#e8f0fe', softDark: '#16294a' },
   teal: { light: '#0d9488', dark: '#2dd4bf', soft: '#e6f7f5', softDark: '#123735' },
   amber: { light: '#b45309', dark: '#fbbf24', soft: '#fdf3e2', softDark: '#3a2e12' },
   rose: { light: '#e11d48', dark: '#fb7185', soft: '#fdecef', softDark: '#3d1a22' },
-  violet: { light: '#7c3aed', dark: '#a78bfa', soft: '#f3edff', softDark: '#2e2245' },
+  violet: { light: '#c2410c', dark: '#fb923c', soft: '#fff1e8', softDark: '#3a2214' },
   emerald: { light: '#059669', dark: '#34d399', soft: '#e7f7ef', softDark: '#143326' },
   sky: { light: '#0284c7', dark: '#38bdf8', soft: '#e6f4fb', softDark: '#13304a' },
   slate: { light: '#475569', dark: '#94a3b8', soft: '#eef1f5', softDark: '#262c36' },
+};
+
+/** What each accent is called in the UI. */
+export const ACCENT_LABELS: Record<SpaceColor, string> = {
+  indigo: 'Blue', teal: 'Teal', amber: 'Amber', rose: 'Rose', violet: 'Coral', emerald: 'Emerald', sky: 'Sky', slate: 'Slate',
 };
 
 /** Brand primary (Vizulla blue). Space colors tint Space chips only. */
@@ -19,7 +27,7 @@ export const BRAND = { light: '#2563eb', dark: '#60a5fa', soft: '#e8f0fe', softD
 
 /** Profile avatar colors (white initial on top; all pass 4.5:1). */
 export const PROFILE_HEX: Record<string, string> = {
-  blue: '#2563eb', violet: '#7c3aed', rose: '#e11d48', amber: '#b45309', emerald: '#047857', teal: '#0f766e', sky: '#0369a1', slate: '#475569',
+  blue: '#2563eb', violet: '#c2410c', rose: '#e11d48', amber: '#b45309', emerald: '#047857', teal: '#0f766e', sky: '#0369a1', slate: '#475569',
 };
 
 export const THEMES = {
