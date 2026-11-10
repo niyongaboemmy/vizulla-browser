@@ -6,6 +6,10 @@ import { t } from '@vz/common/i18n';
 import { SPACE_COLORS, SPACE_ICONS } from '@vz/common/types';
 import { ACCENTS } from '@vz/common/tokens';
 import qrcode from 'qrcode-generator';
+import { client } from '../shared/bridge';
+import { OverlayInterface } from '@vz/common/mojom/shell';
+
+const overlay = client(OverlayInterface);
 
 export interface DialogHost {
   resolve(result: unknown): void;
@@ -74,7 +78,7 @@ const loadImage = (src: string) =>
     i.src = src;
   });
 
-/** Draws an app's icon at 512 px (and the macOS 1024 px grid): any image format, maskable icons rounded, a letter tile when there's none. */
+/** Draws an app's icon at 512 px (and a macOS-grid copy): any image format, maskable icons rounded, a letter tile when there's none. */
 async function composeIcons(src: string | null, name: string, color: string | null, maskable: boolean): Promise<{ png: string; macPng: string }> {
   const img = src ? await loadImage(src).catch(() => null) : null;
   const c = document.createElement('canvas');
@@ -103,10 +107,10 @@ async function composeIcons(src: string | null, name: string, color: string | nu
     g.textBaseline = 'middle';
     g.fillText((name.trim()[0] ?? 'A').toUpperCase(), 256, 276);
   }
-  // macOS icons sit inside the 824 px square of a 1024 px canvas (Apple's icon grid).
+  // macOS icons sit inside the inner ~80% of the canvas (Apple's icon grid: 824 of 1024).
   const m = document.createElement('canvas');
-  m.width = m.height = 1024;
-  m.getContext('2d')!.drawImage(c, 100, 100, 824, 824);
+  m.width = m.height = 512;
+  m.getContext('2d')!.drawImage(c, 50, 50, 412, 412);
   return { png: c.toDataURL('image/png'), macPng: m.toDataURL('image/png') };
 }
 
@@ -127,8 +131,23 @@ registerDialog('app-install', (d, host) => {
     if (!draft.name!.trim() || draft.busy) return;
     draft.busy = true;
     host.requestUpdate();
-    const icons = await composeIcons(d.icon ? String(d.icon) : null, draft.name!, d.themeColor ? String(d.themeColor) : null, !!d.maskable);
-    host.resolve({ name: draft.name!.trim(), open: draft.open, desktop: draft.desktop, ...icons });
+    // Icons can be far bigger than a dialog result may be: they travel apart, by token. Whatever
+    // happens to them, the install goes ahead (without its own icon at worst): never stuck here.
+    const token = () => crypto.randomUUID().replace(/-/g, '');
+    let png = '';
+    let macPng = '';
+    try {
+      const icons = await composeIcons(d.icon ? String(d.icon) : null, draft.name!, d.themeColor ? String(d.themeColor) : null, !!d.maskable);
+      const a = token();
+      const b = token();
+      await overlay.stashBlob(a, icons.png);
+      await overlay.stashBlob(b, icons.macPng);
+      png = a;
+      macPng = b;
+    } catch (e) {
+      console.warn('app icon', e);
+    }
+    host.resolve({ name: draft.name!.trim(), open: draft.open, desktop: draft.desktop, png, macPng });
   };
   const qr = () => {
     const q = qrcode(0, 'M');

@@ -211,7 +211,15 @@ export class WebAppsService {
       startUrl: m.startUrl,
     });
     if (!r) return 'dismissed';
-    const rec = this.install(m, { name: r.name?.trim() || m.name, desktop: !!r.desktop, png: r.png, macPng: r.macPng });
+    // The composed icons came separately (Overlay.stashBlob); the result names them.
+    let rec: InstalledApp;
+    try {
+      rec = this.install(m, { name: r.name?.trim() || m.name, desktop: !!r.desktop, png: this.app.takeBlob(r.png) ?? '', macPng: this.app.takeBlob(r.macPng) ?? '' });
+    } catch (e) {
+      console.warn('[vz] app install failed', e);
+      w.toast(t('app_install_failed', { name: m.name }), { label: t('action_retry'), run: () => void this.promptInstall(w, tabId) }, 8000);
+      return 'dismissed';
+    }
     if (!tab.wc.isDestroyed()) tab.wc.mainFrame.send('vz:appinstalled');
     w.pushState();
     if (r.open) {
@@ -331,6 +339,11 @@ export class WebAppsService {
     if (!tab || s?.state !== 'installed' || !s.id) return;
     this.launch(s.id, tab.url);
     w.closeTab(tab.id);
+  }
+
+  /** The overlay that belongs to an app window (its dialogs talk back to the browser). */
+  overlayForSender(wc: WebContents): AppWindow['overlay'] | null {
+    return [...this.windows.values()].find((w) => !w.win.isDestroyed() && w.overlay.webContents === wc)?.overlay ?? null;
   }
 
   windowFor(wc: WebContents): AppWindow | null {

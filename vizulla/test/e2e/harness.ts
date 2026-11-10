@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { deflateSync } from 'node:zlib';
+import { randomBytes } from 'node:crypto';
 
 export const ROOT = resolve(__dirname, '../../..');
 
@@ -69,12 +70,23 @@ const PAGES: Record<string, string> = {
   '/dialogs': `<!doctype html><title>Dialogs</title><h1>Dialogs</h1><iframe id="f" width="300" height="80"></iframe>`,
   '/pwa': `<!doctype html><title>Vizulla Test App</title><link rel="manifest" href="/manifest.webmanifest"><h1>Test app</h1><script>
     window.__bip = null; addEventListener('beforeinstallprompt', (e) => { window.__bip = e; }); addEventListener('appinstalled', () => { window.__installed = true; });</script>`,
+  '/pwa-big': `<!doctype html><title>Big Icon App</title><link rel="manifest" href="/manifest-big.webmanifest"><h1>Big icon</h1>`,
+  '/manifest-big.webmanifest': JSON.stringify({ name: 'Big Icon App', start_url: '/pwa-big', scope: '/', display: 'standalone', icons: [{ src: '/big-icon.png', sizes: '512x512', type: 'image/png' }] }),
   '/manifest.webmanifest': JSON.stringify({ name: 'Vizulla Test App', short_name: 'Test App', start_url: '/pwa', scope: '/', display: 'standalone', theme_color: '#0ea5e9', background_color: '#ffffff', icons: [{ src: '/icon.png', sizes: '192x192', type: 'image/png' }] }),
   '/pdf': '',
 };
 
 /** A solid-colour PNG (the test app's icon). */
 function solidPng(size: number, [r, g, b]: number[]): Buffer {
+  return png(size, () => Buffer.alloc(size * 3, Buffer.from([r!, g!, b!])));
+}
+
+/** A PNG of random pixels: barely compressible, like a detailed real logo. */
+function noisyPng(size: number): Buffer {
+  return png(size, () => randomBytes(size * 3));
+}
+
+function png(size: number, row: () => Buffer): Buffer {
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -98,8 +110,7 @@ function solidPng(size: number, [r, g, b]: number[]): Buffer {
   ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 2; // RGB
-  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, Buffer.from([r!, g!, b!]))]);
-  const raw = Buffer.concat(Array.from({ length: size }, () => row));
+  const raw = Buffer.concat(Array.from({ length: size }, () => Buffer.concat([Buffer.from([0]), row()])));
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
@@ -109,6 +120,12 @@ export async function startServer(): Promise<{ server: Server; base: string }> {
     if (path === '/sample.pdf') {
       res.writeHead(200, { 'content-type': 'application/pdf' });
       res.end(readFileSync(join(ROOT, 'vizulla/test/data/sample.pdf')));
+      return;
+    }
+    if (path === '/big-icon.png') {
+      // A real-world-sized icon: noise compresses badly (hundreds of KB, like a detailed logo).
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(noisyPng(512));
       return;
     }
     if (path === '/icon.png') {

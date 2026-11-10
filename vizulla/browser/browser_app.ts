@@ -205,6 +205,21 @@ export class BrowserApp {
     return this.appDialogHost?.(wc) ?? null;
   }
 
+  /** Large overlay results by one-time token (Overlay.stashBlob), taken once. */
+  private readonly blobs = new Map<string, { at: number; data: string }>();
+  takeBlob(token: unknown): string | null {
+    if (typeof token !== 'string') return null;
+    const b = this.blobs.get(token);
+    this.blobs.delete(token);
+    return b?.data ?? null;
+  }
+
+  /** What an app window's overlay needs to look right (no browser window behind it). */
+  private appOverlayState() {
+    const p = this.profile.prefs;
+    return { locale: this.locale, theme: p.get('appearance.theme'), accent: p.get('appearance.accent'), density: p.get('appearance.density') };
+  }
+
   /** Installed web apps' windows host their own dialogs (apps/web_apps.ts). */
   appDialogHost: ((wc: Electron.WebContents) => DialogHost | null) | null = null;
 
@@ -567,6 +582,11 @@ export class BrowserApp {
       if (!w) throw new Error('no window');
       return w;
     };
+    const overlayOf = (ctx: CallContext) => {
+      const o = this.windowForSender(ctx.sender)?.overlay ?? this.webApps?.overlayForSender(ctx.sender);
+      if (!o) throw new Error('no overlay');
+      return o;
+    };
     this.router.bind(
       ShellInterface,
       {
@@ -689,10 +709,18 @@ export class BrowserApp {
     this.router.bind(
       OverlayInterface,
       {
-        ready: (ctx) => win(ctx).overlay.onReady(),
-        getState: (ctx) => win(ctx).state(),
+        // An installed app's window has its own overlay (dialogs, permission prompts): these resolve
+        // the overlay by its sender, not only browser windows'.
+        ready: (ctx) => overlayOf(ctx).onReady(),
+        getState: (ctx) => this.windowForSender(ctx.sender)?.state() ?? this.appOverlayState(),
         runCommand: (ctx, id) => this.runCommand(win(ctx), id),
-        close: (ctx, result) => win(ctx).overlay.close(result),
+        close: (ctx, result) => overlayOf(ctx).close(result),
+        stashBlob: (ctx, token, data) => {
+          // Large results (an installing app's icons) travel apart from the small dialog result.
+          if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(data)) throw new Error('not a PNG');
+          this.blobs.set(token, { at: Date.now(), data });
+          for (const [k, b] of this.blobs) if (Date.now() - b.at > 120_000) this.blobs.delete(k);
+        },
         query: async (ctx, input, mode) => {
           const w = win(ctx);
           await Promise.all(this.hooks.prefetchSuggest.map((fn) => fn(w, input).catch(() => undefined)));
@@ -721,7 +749,7 @@ export class BrowserApp {
           return r;
         },
         accept: (ctx, input, suggestionId, opts) => this.acceptCommandBar(win(ctx), input, suggestionId, opts),
-        dialogResult: (ctx, id, result) => win(ctx).overlay.dialogResult(id, result),
+        dialogResult: (ctx, id, result) => overlayOf(ctx).dialogResult(id, result),
         setShieldsForSite: (ctx, on) => {
           const w = win(ctx);
           const tab = w.activeTab();

@@ -2,7 +2,7 @@
 // defaults and controls; installable web apps (detect, install, app window,
 // OS shortcut, beforeinstallprompt, vizulla://apps, uninstall).
 import { expect, test, type Page } from '@playwright/test';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inMain, launch, waitFor, type Harness } from './harness';
@@ -206,6 +206,43 @@ test.describe('installable web apps', () => {
     const page = (await waitFor(async () => h.app.windows().find((w) => w.url().startsWith('vizulla://apps')), (p) => !!p))!;
     await expect(page.getByText('Vizulla Test App')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Remove Vizulla Test App' })).toBeVisible();
+  });
+
+  test('a real-world icon (far bigger than a dialog result) installs, with its icon and shortcut', async () => {
+    h = await launch({ env: { VZ_APPS_DIR: appsDir() } });
+    const chrome = await h.chrome();
+    await go('/pwa-big', 'Big Icon App');
+    await expect.poll(() => inMain(h, (vz) => vz.focused().state().install?.state)).toBe('installable');
+    await chrome.locator('vz-toolbar').getByRole('button', { name: 'Install Big Icon App' }).click();
+    const dlg = (await overlay()).getByRole('dialog');
+    await dlg.getByRole('checkbox', { name: 'Open the app now' }).uncheck();
+    await dlg.getByRole('button', { name: 'Install' }).click();
+    const apps = (await waitFor(() => inMain(h, (vz) => vz.webApps.list()), (l: unknown[]) => l.length === 1, 15_000)) as { shortcuts: string[]; iconFile: string }[];
+    expect(statSync(apps[0]!.iconFile).size).toBeGreaterThan(64 * 1024); // the noisy icon itself, not a fallback
+    for (const f of apps[0]!.shortcuts) expect(existsSync(f)).toBe(true);
+    // The success dialog follows.
+    await expect((await overlay()).getByRole('dialog')).toContainText('Big Icon App is installed');
+    expect(h.logs.join('')).not.toContain('bad IPC message');
+  });
+
+  test("an app window's own dialogs work (alert/confirm in the app)", async () => {
+    h = await launch({ env: { VZ_APPS_DIR: appsDir() } });
+    await h.chrome();
+    const id = (await inMain(h, (vz, base) => {
+      const url = `${base}/dialogs`;
+      const m = { id: url, name: 'Dialog App', shortName: 'D', description: '', startUrl: url, scope: `${base}/`, display: 'standalone', themeColor: null, backgroundColor: null, icons: [], manifestUrl: '' };
+      const rec = vz.webApps.install(m, { name: 'Dialog App', desktop: false, png: '', macPng: '' });
+      vz.webApps.launch(rec.id);
+      return rec.id;
+    }, h.base)) as string;
+    await waitFor(() => inMain(h, (vz, x) => vz.webApps.windows.get(x)?.wc.getURL() ?? '', id), (u) => u.endsWith('/dialogs'));
+    const answer = inMain(h, (vz, x) => vz.webApps.windows.get(x).wc.executeJavaScript("String(confirm('Inside the app?'))", true), id) as Promise<string>;
+    // The only overlay so far is the app window's own.
+    const dlg = (await overlay()).getByRole('alertdialog');
+    await expect(dlg).toContainText('Inside the app?');
+    await dlg.getByRole('button', { name: 'OK' }).click();
+    expect(await answer).toBe('true');
+    expect(await inMain(h, (vz, x) => vz.webApps.windows.get(x).overlay.isOpen, id)).toBe(false);
   });
 
   test('vizulla://apps guides first-time users when nothing is installed', async () => {

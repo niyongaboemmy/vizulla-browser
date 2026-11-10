@@ -1131,5 +1131,7 @@
   "apps_step_2": "Bofya Sakinisha kwenye upau wa anwani.",
   "apps_step_3": "Ifungue wakati wowote. {where}.",
   "set_site_colors": "Paka dirisha rangi ya tovuti",
-  "set_site_colors_desc": "Vichupo na upau wa zana huchukua rangi ya kila tovuti, kama kwenye simu. Isipokuwepo, huwa nyeupe katika mandhari angavu na nyeusi katika giza."
+  "set_site_colors_desc": "Vichupo na upau wa zana huchukua rangi ya kila tovuti, kama kwenye simu. Isipokuwepo, huwa nyeupe katika mandhari angavu na nyeusi katika giza.",
+  "app_install_failed": "Imeshindwa kusakinisha {name}. Jaribu tena.",
+  "action_retry": "Jaribu tena"
 }

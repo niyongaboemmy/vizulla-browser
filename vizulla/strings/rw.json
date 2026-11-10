@@ -1131,5 +1131,7 @@
   "apps_step_2": "Kanda Shyiraho mu mwanya wa aderesi.",
   "apps_step_3": "Uyifungure igihe ushakiye. {where}.",
   "set_site_colors": "Siga idirishya ibara ry’urubuga",
-  "set_site_colors_desc": "Amatabu n’umurongo w’ibikoresho bifata ibara rya buri rubuga, nko kuri telefone. Iyo ridahari, biba umweru mu nsanganyamatsiko y’urumuri n’umukara mu y’umwijima."
+  "set_site_colors_desc": "Amatabu n’umurongo w’ibikoresho bifata ibara rya buri rubuga, nko kuri telefone. Iyo ridahari, biba umweru mu nsanganyamatsiko y’urumuri n’umukara mu y’umwijima.",
+  "app_install_failed": "Ntibyashobotse gushyiraho {name}. Ongera ugerageze.",
+  "action_retry": "Ongera ugerageze"
 }

@@ -69,6 +69,8 @@ export const ShellInterface = defineInterface('Shell', {
 
 export const OverlayInterface = defineInterface('Overlay', {
   ready: [],
+  /** A large dialog result (a PNG data URL) under a one-time token; the dialog result names the token. */
+  stashBlob: [v.string({ max: 64 }), v.string({ max: 6_000_000 })],
   getState: [],
   runCommand: [v.string({ max: 64 })],
   close: [v.optional(v.json({ maxBytes: 65536 }))],

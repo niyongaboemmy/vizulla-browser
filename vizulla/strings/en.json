@@ -1130,5 +1130,7 @@
   "apps_step_2": "Click Install in the address bar.",
   "apps_step_3": "Open it any time. {where}.",
   "set_site_colors": "Color the window like the website",
-  "set_site_colors_desc": "The tabs and toolbar take each site’s own color, like on a phone. Without one, they’re white in light theme and black in dark."
+  "set_site_colors_desc": "The tabs and toolbar take each site’s own color, like on a phone. Without one, they’re white in light theme and black in dark.",
+  "app_install_failed": "Couldn’t install {name}. Try again.",
+  "action_retry": "Try again"
 }

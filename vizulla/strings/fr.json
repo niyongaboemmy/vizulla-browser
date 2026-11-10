@@ -1130,5 +1130,7 @@
   "apps_step_2": "Cliquez sur Installer dans la barre d'adresse.",
   "apps_step_3": "Ouvrez-la quand vous voulez. {where}.",
   "set_site_colors": "Colorer la fenêtre comme le site",
-  "set_site_colors_desc": "Les onglets et la barre d’outils prennent la couleur de chaque site, comme sur un téléphone. Sinon, ils sont blancs en thème clair et noirs en thème sombre."
+  "set_site_colors_desc": "Les onglets et la barre d’outils prennent la couleur de chaque site, comme sur un téléphone. Sinon, ils sont blancs en thème clair et noirs en thème sombre.",
+  "app_install_failed": "Impossible d’installer {name}. Réessayez.",
+  "action_retry": "Réessayer"
 }
