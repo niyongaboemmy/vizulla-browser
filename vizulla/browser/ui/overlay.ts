@@ -13,6 +13,7 @@ export type OverlaySurface =
   | { kind: 'site-info'; anchor: { x: number; y: number; width: number; height: number }; info: unknown }
   | { kind: 'tools'; anchor: { x: number; y: number; width: number; height: number }; web: boolean }
   | { kind: 'app-menu'; anchor: { x: number; y: number; width: number; height: number }; menu: unknown }
+  | { kind: 'accounts'; anchor: { x: number; y: number; width: number; height: number }; menu: unknown }
   | { kind: 'extensions'; anchor: { x: number; y: number; width: number; height: number }; items: unknown[] }
   | { kind: 'dialog'; id: string; dialog: Record<string, unknown> & { type: string } };
 

@@ -76,6 +76,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'view.theme', title: 'cmd_theme', category: 'view', keywords: 'dark light mode appearance' },
   // AI
   { id: 'ai.panel', title: 'cmd_ai_panel', category: 'ai', accelerator: 'CmdOrCtrl+E', keywords: 'assistant chat ask' },
+  { id: 'google.gemini', title: 'gemini_ask', category: 'ai', keywords: 'gemini google chat ask bard' },
   { id: 'ai.summarize', title: 'cmd_ai_summarize', category: 'ai', keywords: 'tldr summary key points' },
   { id: 'ai.compareTabs', title: 'cmd_ai_compare', category: 'ai', keywords: 'multi tab synthesis table', feature: 'VizullaMultiTab' },
   { id: 'notes.panel', title: 'cmd_notes_panel', category: 'ai', accelerator: 'CmdOrCtrl+Shift+N', keywords: 'clip write', feature: 'VizullaNotes' },

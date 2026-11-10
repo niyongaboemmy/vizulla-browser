@@ -27,6 +27,11 @@ export const ShellInterface = defineInterface('Shell', {
   showTabMenu: [tabId, v.optional(point), v.optional(v.array(tabId, { max: 500 }))],
   showPasswordMenu: [tabId, v.optional(point)],
   showProfileMenu: [v.optional(point)],
+  /** The toolbar avatar: Google accounts and Vizulla profiles (google/google_service.ts). */
+  openAccountMenu: [rect],
+  /** Where the Gemini panel's page goes (undefined: the panel is gone). */
+  setPanelView: [v.optional(rect)],
+  geminiAction: [v.literal('page', 'tab', 'reload')],
   /** A tooltip that doesn't fit in the chrome: drawn above the page (ui/tip_view.ts). */
   showTip: [rect, v.string({ max: 20000 })],
   hideTip: [],
@@ -50,7 +55,7 @@ export const ShellInterface = defineInterface('Shell', {
   ungroup: [v.id()],
   setContentBounds: [rect, v.optional(rect)],
   setSidebar: [v.object({ collapsed: v.optional(v.bool()), width: v.optional(v.int({ min: 180, max: 480 })) })],
-  setPanel: [v.optional(v.literal('assistant', 'notes', 'agent')), v.optional(v.int({ min: 300, max: 760 }))],
+  setPanel: [v.optional(v.literal('assistant', 'notes', 'agent', 'gemini')), v.optional(v.int({ min: 300, max: 760 }))],
   openCommandBar: [v.literal('palette', 'address', 'tab-search', 'ask'), v.optional(rect)],
   runCommand: [v.string({ max: 64 }), v.optional(v.json({ maxBytes: 4096 }))],
   dismissToast: [v.id()],
@@ -89,6 +94,8 @@ export const OverlayInterface = defineInterface('Overlay', {
   // Site info panel: set one permission for the current site (ask / allow / block), or reset all
   setSitePermission: [v.string({ max: 40 }), v.string({ max: 8 })],
   resetSitePermissions: [],
+  // Account menu: switch Google account, add / manage / sign out, profiles
+  accountAction: [v.string({ max: 400 })],
 });
 
 /** Generic page handler for vizulla:// pages: each method is host-checked in the browser. */

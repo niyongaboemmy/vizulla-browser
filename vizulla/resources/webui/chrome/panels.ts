@@ -1,4 +1,4 @@
-// <vz-panels>: the right-hand side panel host (assistant, notes, agent).
+// <vz-panels>: the right-hand side panel host (assistant, notes, agent, Gemini).
 // Panel elements are registered by feature modules; each is created lazily on first open.
 import { LitElement, css, html } from 'lit';
 import { base } from '../shared/styles';
@@ -36,7 +36,7 @@ export class VzPanels extends LitElement {
   ];
 
   override render() {
-    const kinds = (Object.keys(PANEL_TAGS) as PanelKind[]).filter((k) => (k !== 'agent' || this.state.features.VizullaAgent) && (k !== 'notes' || this.state.features.VizullaNotes) && (k !== 'assistant' || this.state.aiMode !== 'off' || this.state.panel === 'assistant'));
+    const kinds = (Object.keys(PANEL_TAGS) as PanelKind[]).filter((k) => (k !== 'agent' || this.state.features.VizullaAgent) && (k !== 'notes' || this.state.features.VizullaNotes) && (k !== 'assistant' || this.state.aiMode !== 'off' || this.state.panel === 'assistant') && (k !== 'gemini' || this.state.panel === 'gemini' || (!!this.state.google?.gemini && this.state.google.accounts.some((x) => !x.signedOut))));
     const current = this.state.panel!;
     const def = PANEL_TAGS[current];
     let el = this.created.get(current);

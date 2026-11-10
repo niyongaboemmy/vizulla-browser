@@ -10,6 +10,8 @@ const P: Record<string, string> = {
   plus: 'M12 5v14M5 12h14',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   sparkle: 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4L12 3zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z',
+  'log-out': 'M14 4h5v16h-5M10 8l-4 4 4 4M6 12h11',
+  gemini: 'M12 3c.6 4.8 4.2 8.4 9 9-4.8.6-8.4 4.2-9 9-.6-4.8-4.2-8.4-9-9 4.8-.6 8.4-4.2 9-9z',
   shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z',
   'shield-check': 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3zM8.5 12l2.5 2.5 4.5-5',
   'shield-off': 'M12 3l8 3v6c0 1.6-.4 3.1-1.2 4.4M5.3 5.3 4 6v6c0 4.5 3.4 8.3 8 9 1.9-.3 3.6-1.1 5-2.3M3 3l18 18',
@@ -94,6 +96,17 @@ export function icon(name: string, size = 16, label?: string): TemplateResult {
 }
 
 export const ICON_NAMES = Object.keys(P);
+
+let gradients = 0;
+/** Gemini's four-point star in its own colours (the Ask Gemini button, the account menu). */
+export function geminiMark(size = 16): TemplateResult {
+  const id = `vz-gem-${++gradients}`;
+  return html`<svg class="vz-gem" width=${size} height=${size} viewBox="0 0 24 24" aria-hidden="true">
+    <defs><linearGradient id=${id} x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1a73e8"></stop><stop offset=".45" stop-color="#4e8ef7"></stop><stop offset=".75" stop-color="#9b72cb"></stop><stop offset="1" stop-color="#d96570"></stop>
+    </linearGradient></defs>
+    <path fill=${`url(#${id})`} d="M12 2.5c.7 5.1 4.4 8.8 9.5 9.5-5.1.7-8.8 4.4-9.5 9.5-.7-5.1-4.4-8.8-9.5-9.5 5.1-.7 8.8-4.4 9.5-9.5z"></path></svg>`;
+}
 
 /** The Vizulla mark (same geometry as app/icons/icon.svg, cropped to the tile). */
 export function logo(size = 28, label?: string): TemplateResult {

@@ -3,7 +3,7 @@
 // "compact" mode is used in the vertical layout when the sidebar is hidden.
 import { LitElement, css, html, nothing } from 'lit';
 import { base } from '../shared/styles';
-import { icon } from '../shared/icons';
+import { geminiMark, icon } from '../shared/icons';
 import { PROFILE_HEX } from '@vz/common/tokens';
 import { t } from '@vz/common/i18n';
 import type { UpdateInfo, WindowState } from '@vz/common/types';
@@ -88,7 +88,23 @@ export class VzToolbar extends LitElement {
       .ext .badge { position: absolute; right: 1px; bottom: 3px; min-width: 15px; height: 14px; padding: 0 3px; border-radius: 7px; font-size: 9.5px; font-weight: 700; line-height: 14px; color: #fff; text-align: center; pointer-events: none; box-shadow: 0 0 0 1.5px var(--vz-toolbar); }
       .me-av { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 11.5px; font-weight: 700; transition: transform var(--vz-dur) var(--vz-ease); }
       .me:hover .me-av { transform: scale(1.08); }
+      img.me-av { object-fit: cover; background: var(--vz-surface-2); }
+      /* Signed in to Google: the avatar is your account photo, ringed in this profile's colour when there are several profiles. */
+      .me.ringed .me-av { box-shadow: 0 0 0 2px var(--fr-bg, var(--vz-toolbar)), 0 0 0 3.5px var(--c); }
+      /* "Ask Gemini", as in Chrome: a soft pill whose star turns on hover. */
+      .gem-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px 0 10px; margin: 0 4px; border: 0; border-radius: 999px; cursor: pointer; flex: none;
+        background: var(--vz-omnibox-bg, var(--vz-omnibox)); color: var(--vz-text); font-size: 13px; font-weight: 600; letter-spacing: .005em;
+        animation: install-in 420ms cubic-bezier(.34,1.56,.64,1); transition: background var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .gem-btn:hover { background: var(--vz-omnibox-hover); }
+      .gem-btn:active { transform: scale(.96); }
+      .gem-btn .vz-gem { transition: transform 420ms cubic-bezier(.34,1.56,.64,1); }
+      .gem-btn:hover .vz-gem { transform: rotate(90deg) scale(1.08); }
+      .gem-btn.on { background: var(--vz-accent-soft); color: var(--vz-accent); }
       .tabs-btn { display: none; }
+      @media (max-width: 1000px) {
+        .gem-label { display: none; }
+        .gem-btn { width: 34px; padding: 0; justify-content: center; margin: 0 2px; }
+      }
       @media (max-width: 760px) {
         .wide { display: none; }
         .omni { margin: 0 2px; }
@@ -153,6 +169,7 @@ export class VzToolbar extends LitElement {
             <button class="chip-btn wide" aria-label=${t('cmd_bookmark')} title=${t('cmd_bookmark')} @click=${() => shell.runCommand('nav.bookmark')}>${icon('star', 14)}</button>`
           : nothing}
       </div>
+      ${this.renderGemini()}
       <button class="icon-btn wide" aria-label=${t('cmd_tools')} title=${t('cmd_tools')} aria-haspopup="menu" @click=${(e: MouseEvent) => {
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         void shell.openToolsMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
@@ -169,11 +186,7 @@ export class VzToolbar extends LitElement {
       <button class="icon-btn wide" aria-label=${t('cmd_downloads')} title=${t('cmd_downloads')} @click=${() => shell.runCommand('page.downloads')}>${icon('download', 17)}</button>
       ${s.platform.endsWith(':private')
         ? nothing
-        : html`<button class="icon-btn me" aria-label=${t('profile_avatar', { name: s.profile.name })} title=${t('profile_avatar', { name: s.profile.name })}
-            @click=${(e: MouseEvent) => {
-              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              void shell.showProfileMenu({ x: Math.round(r.left), y: Math.round(r.bottom + 4) });
-            }}><span class="me-av" style="--c:${PROFILE_HEX[s.profile.color] ?? PROFILE_HEX.blue}">${(s.profile.name[0] ?? '?').toUpperCase()}</span></button>`}
+        : this.renderMe()}
       <button class="icon-btn" aria-label=${t('menu_more')} title=${t('menu_more')} aria-haspopup="menu" @click=${(e: MouseEvent) => {
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         void shell.openAppMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
@@ -231,6 +244,29 @@ export class VzToolbar extends LitElement {
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         void shell.openExtensionsMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
       }}>${icon('puzzle', 17)}</button>`;
+  }
+
+  /** The avatar: your Google account photo when signed in on the web, else this profile's initial. */
+  private renderMe() {
+    const s = this.state;
+    const g = s.google;
+    const me = g?.accounts.find((a) => a.email === g.active && !a.signedOut);
+    const c = PROFILE_HEX[s.profile.color] ?? PROFILE_HEX.blue;
+    const label = me ? `${s.profile.name} · ${me.email}` : t('profile_avatar', { name: s.profile.name });
+    return html`<button class="icon-btn me ${me && s.profile.count > 1 ? 'ringed' : ''}" aria-label=${label} title=${label} aria-haspopup="menu" style="--c:${c}"
+      @click=${(e: MouseEvent) => {
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        void shell.openAccountMenu({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+      }}>${me?.photo ? html`<img class="me-av" src=${me.photo} alt="" />` : html`<span class="me-av">${((me?.name ?? s.profile.name)[0] ?? '?').toUpperCase()}</span>`}</button>`;
+  }
+
+  /** "Ask Gemini": shown once you're signed in to Google on the web; opens Gemini beside the page. */
+  private renderGemini() {
+    const g = this.state.google;
+    if (!g?.gemini || !g.accounts.some((a) => !a.signedOut)) return nothing;
+    const on = this.state.panel === 'gemini';
+    return html`<button class="gem-btn ${on ? 'on' : ''}" aria-pressed=${on} aria-label=${t('gemini_ask')} title=${t('gemini_ask')} @click=${() => shell.runCommand('google.gemini')}>
+      ${geminiMark(17)}<span class="gem-label">${t('gemini_ask')}</span></button>`;
   }
 
   private renderUpdate(u: UpdateInfo) {

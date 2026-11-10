@@ -33,6 +33,12 @@ export interface Prefs {
   'tabs.restoreOnStartup': boolean;
   /** Prefetch a link on the current site while the pointer rests on it (never other sites, never private windows). */
   'performance.preloadPages': boolean;
+  /** Google accounts signed in on the web, in the toolbar avatar's menu (google/google_service.ts). */
+  'google.accounts': boolean;
+  /** The toolbar's "Ask Gemini" button and panel. */
+  'google.gemini': boolean;
+  /** Email of the Google account Gemini and account switching use ('' = Google's default). */
+  'google.activeAccount': string;
   'updates.autoCheck': boolean;
   'passwords.offerToSave': boolean;
   'passwords.neverSave': string[];
@@ -133,6 +139,9 @@ export const DEFAULT_PREFS: Prefs = {
   'tabs.discardExemptSites': [],
   'tabs.restoreOnStartup': true,
   'performance.preloadPages': true,
+  'google.accounts': true,
+  'google.gemini': true,
+  'google.activeAccount': '',
   'updates.autoCheck': true,
   'passwords.offerToSave': true,
   'passwords.neverSave': [],
@@ -226,6 +235,9 @@ export const WRITABLE_PREFS: Partial<Record<PrefKey, (v: unknown) => boolean>> =
   'tabs.memorySaverMinutes': (v) => typeof v === 'number' && v >= 0 && v <= 24 * 60,
   'tabs.restoreOnStartup': (v) => typeof v === 'boolean',
   'performance.preloadPages': (v) => typeof v === 'boolean',
+  'google.accounts': (v) => typeof v === 'boolean',
+  'google.gemini': (v) => typeof v === 'boolean',
+  'google.activeAccount': (v) => typeof v === 'string' && v.length <= 320,
   'updates.autoCheck': (v) => typeof v === 'boolean',
   'passwords.offerToSave': (v) => typeof v === 'boolean',
   'passwords.neverSave': (v) => Array.isArray(v) && v.length <= 500 && v.every((x) => typeof x === 'string' && x.length <= 512),

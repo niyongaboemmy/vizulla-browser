@@ -68,6 +68,7 @@ const PAGES: Record<string, string> = {
   '/toggle': `<!doctype html><title>Toggle</title><style>body{margin:0;background:#ffffff;transition:background-color .2s}html.dark body{background:#0b1020}header{height:60px}</style>
     <header></header><button id="t" onclick="document.documentElement.classList.toggle('dark')">Dark mode</button>`,
   '/dialogs': `<!doctype html><title>Dialogs</title><h1>Dialogs</h1><iframe id="f" width="300" height="80"></iframe>`,
+  '/gemini': `<!doctype html><title>Gemini</title><div contenteditable="true" role="textbox" aria-label="Enter a prompt here" style="min-height:40px;border:1px solid #ccc"></div>`,
   '/pwa': `<!doctype html><title>Vizulla Test App</title><link rel="manifest" href="/manifest.webmanifest"><h1>Test app</h1><script>
     window.__bip = null; addEventListener('beforeinstallprompt', (e) => { window.__bip = e; }); addEventListener('appinstalled', () => { window.__installed = true; });</script>`,
   '/pwa-big': `<!doctype html><title>Big Icon App</title><link rel="manifest" href="/manifest-big.webmanifest"><h1>Big icon</h1>`,
@@ -138,6 +139,17 @@ export async function startServer(): Promise<{ server: Server; base: string }> {
       res.end(JSON.stringify(req.headers));
       return;
     }
+    if (path === '/ListAccounts') {
+      // Google's account list, as accounts.google.com answers it (google/accounts.ts).
+      const accounts = (server as unknown as { googleAccounts?: unknown[] }).googleAccounts ?? [
+        ['gaia.l.a', 1, 'Ada Lovelace', 'ada@gmail.com', null, 1, 1, 0, null, 1, '111', null, null, null, 0],
+        ['gaia.l.a', 1, 'Ada at Work', 'ada@work.example', null, 1, 1, 0, null, 1, '222', null, null, null, 0],
+        ['gaia.l.a', 1, 'Old Account', 'old@gmail.com', null, 1, 1, 0, null, 1, '333', null, null, null, 1],
+      ];
+      res.writeHead(req.method === 'POST' ? 200 : 400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(['gaia.l.a.r', accounts]));
+      return;
+    }
     if (req.method === 'POST') {
       let body = '';
       req.on('data', (c) => (body += c));
@@ -166,7 +178,8 @@ export async function launch(opts: { profile?: string; env?: Record<string, stri
   const { server, base } = await startServer();
   const app = await electron.launch({
     args: [ROOT, `--user-data-dir=${profile}`, ...(opts.args ?? [])],
-    env: { ...process.env, VZ_CHANNEL: 'dev', VZ_TEST: '1', ...opts.env } as Record<string, string>,
+    // `{base}` in an env value becomes this run's server address.
+    env: { ...process.env, VZ_CHANNEL: 'dev', VZ_TEST: '1', ...Object.fromEntries(Object.entries(opts.env ?? {}).map(([k, v]) => [k, v.replaceAll('{base}', base)])) } as Record<string, string>,
     timeout: 30_000,
   });
   const logs: string[] = [];

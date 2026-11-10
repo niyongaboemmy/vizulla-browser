@@ -2,13 +2,14 @@
 // (CMD-01), dialogs, and the Shields panel. Pages can't draw over this layer (C9).
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base } from '../shared/styles';
-import { icon } from '../shared/icons';
+import { geminiMark, icon } from '../shared/icons';
+import { PROFILE_HEX } from '@vz/common/tokens';
 import { client, on } from '../shared/bridge';
 import { installTooltips } from '../shared/tooltip';
 import { applyLocale, applyTheme } from '../shared/theme';
 import { OverlayInterface } from '@vz/common/mojom/shell';
 import { t } from '@vz/common/i18n';
-import type { CommandBarResult, Suggestion, WindowState } from '@vz/common/types';
+import type { CommandBarResult, GoogleAccountInfo, GoogleInfo, Suggestion, WindowState } from '@vz/common/types';
 import { DIALOGS, type DialogHost } from './dialogs';
 import './dialogs_extra';
 import '../shared/select';
@@ -23,6 +24,7 @@ type Surface =
   | { kind: 'tech'; anchor: { x: number; y: number; width: number; height: number }; host: string; url: string; result: Tech[] | null }
   | { kind: 'tools'; anchor: { x: number; y: number; width: number; height: number }; web: boolean }
   | { kind: 'app-menu'; anchor: { x: number; y: number; width: number; height: number }; menu: AppMenu }
+  | { kind: 'accounts'; anchor: { x: number; y: number; width: number; height: number }; menu: AccountMenu }
   | { kind: 'dialog'; id: string; dialog: Record<string, unknown> & { type: string } };
 
 interface ShieldsStatus { enabled: boolean; siteEnabled: boolean; blockAds: boolean; adsAllowed: boolean; strict: boolean; site: string; blocked: { ads: number; trackers: number; other: number; total: number }; ruleSource: string }
@@ -36,6 +38,8 @@ export const permName = (k: string) => t(`perm_name_${k.replace(/-/g, '_')}` as 
 
 interface AppMenuItem { id: string; label: string; shortcut: string; enabled: boolean; sub: boolean }
 interface AppMenu { zoom: number; theme: string | null; update: string | null; groups: AppMenuItem[][] }
+interface ProfileRow { id: string; name: string; color: string }
+interface AccountMenu { google: GoogleInfo | null; profile: ProfileRow; profiles: ProfileRow[] }
 
 const TOOLS: { id: string; icon: string; label: string; web: boolean }[] = [
   { id: 'tools.screenshot', icon: 'focus', label: 'tool_screenshot', web: true },
@@ -267,6 +271,36 @@ export class VzOverlay extends LitElement {
       .app-menu .grow { flex: 1; }
       .app-menu .kbd { font-size: 11px; color: var(--vz-text-3); }
       .app-menu .sep { height: 1px; background: var(--vz-border); margin: 5px 6px; }
+      /* Account menu (toolbar avatar): your Google account up top, the others to switch to, then profiles. */
+      .acct { width: 340px; padding: 8px; border-radius: 22px; max-height: calc(100vh - 70px); overflow: auto; }
+      .acct-head { display: grid; justify-items: center; text-align: center; gap: 2px; padding: 18px 14px 14px; margin-bottom: 6px; border-radius: 16px; background: var(--vz-surface-2); }
+      .acct-av { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; margin-bottom: 10px; display: grid; place-items: center; background: var(--c, var(--vz-accent)); color: #fff; font-size: 28px; font-weight: 700;
+        box-shadow: 0 0 0 3px var(--vz-surface-2), 0 0 0 5px var(--ring, transparent); animation: av-in 420ms cubic-bezier(.34,1.56,.64,1) both; }
+      @keyframes av-in { from { opacity: 0; transform: scale(.6); } }
+      .acct-name { font-weight: 650; font-size: 16px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .acct-mail { font-size: var(--vz-text-s); color: var(--vz-text-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .acct-desc { font-size: var(--vz-text-s); color: var(--vz-text-2); max-width: 260px; line-height: 1.45; margin-top: 4px; }
+      .acct-head .btn { margin-top: 12px; height: 34px; padding: 0 18px; border-radius: 999px; }
+      .acct-row { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-radius: 12px; cursor: pointer;
+        animation: rise 220ms var(--vz-ease) both; transition: background var(--vz-dur); }
+      .acct-row:hover, .acct-row:focus-visible { background: var(--vz-surface-hover); outline: none; }
+      .acct-row .rn { flex: 1; min-width: 0; display: grid; text-align: start; }
+      .acct-row .rn b { font-weight: 600; font-size: var(--vz-text-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .acct-row .rn small { font-size: 12px; color: var(--vz-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .acct-row .hint { font-size: 11.5px; font-weight: 600; color: var(--vz-accent); opacity: 0; transform: translateX(-4px); transition: opacity var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .acct-row:hover .hint, .acct-row:focus-visible .hint { opacity: 1; transform: none; }
+      .acct-row .tag { font-size: 11px; color: var(--vz-text-3); padding: 2px 8px; border-radius: 999px; background: var(--vz-surface-2); }
+      .acct-row.out .sm-av { filter: grayscale(1); opacity: .55; }
+      .acct-row.current { cursor: default; }
+      .acct-row.current:hover { background: transparent; }
+      .sm-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; display: grid; place-items: center; background: var(--c, var(--vz-accent)); color: #fff; font-size: 13px; font-weight: 700; }
+      .sm-av.xs { width: 24px; height: 24px; font-size: 11px; }
+      .acct .mi { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 14px; border-radius: 12px; font-size: var(--vz-text-m); cursor: pointer; transition: background var(--vz-dur); }
+      .acct .mi:hover, .acct .mi:focus-visible { background: var(--vz-surface-hover); outline: none; }
+      .acct .mi .vz-icon { color: var(--vz-text-2); }
+      .acct .sep { height: 1px; background: var(--vz-border); margin: 6px 10px; }
+      .acct .sec-title { padding: 8px 14px 4px; margin: 0; }
+      .acct .now { font-size: 11px; color: var(--vz-text-3); }
       .zoom-row { display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 4px 0 10px; font-size: var(--vz-text-m); }
       .zoom-row .icon-btn { width: 28px; height: 28px; border-radius: 50%; }
       .zoom-row .pct { all: unset; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; font-size: 12.5px; border-radius: 8px; padding: 4px 2px; cursor: default; }
@@ -412,6 +446,7 @@ export class VzOverlay extends LitElement {
     if (s.kind === 'site-info') return this.renderSiteInfo(s);
     if (s.kind === 'tech') return this.renderTech(s);
     if (s.kind === 'app-menu') return this.renderAppMenu(s);
+    if (s.kind === 'accounts') return this.renderAccounts(s);
     return this.renderDialog(s);
   }
 
@@ -567,6 +602,64 @@ export class VzOverlay extends LitElement {
           ${g.map((x) => html`<button role="menuitem" class="mi" ?disabled=${!x.enabled} aria-haspopup=${x.sub ? 'menu' : nothing} @click=${() => void run(x.id)}>
             <span>${x.label}</span><span class="grow"></span>${x.shortcut ? html`<span class="kbd">${x.shortcut}</span>` : nothing}${x.sub ? icon('chevron-right', 14) : nothing}</button>`)}
           ${gi < m.groups.length - 1 ? html`<div class="sep"></div>` : nothing}`)}
+      </div>`;
+  }
+
+  /** The toolbar avatar's menu, like Chrome's: Google accounts to switch between, Gemini, then Vizulla profiles. */
+  private renderAccounts(s: Extract<Surface, { kind: 'accounts' }>): TemplateResult {
+    const m = s.menu;
+    const g = m.google;
+    const me = g?.accounts.find((a) => a.email === g.active && !a.signedOut) ?? null;
+    const others = g?.accounts.filter((a) => a !== me) ?? [];
+    const pc = (c: string) => PROFILE_HEX[c] ?? PROFILE_HEX.blue;
+    const left = Math.max(8, Math.min(window.innerWidth - 348, s.anchor.x + s.anchor.width - 340));
+    const run = async (id: string) => {
+      this.surface = null;
+      await overlay.accountAction(id);
+    };
+    const av = (a: GoogleAccountInfo, cls: string) =>
+      a.photo ? html`<img class=${cls} src=${a.photo} alt="" />` : html`<span class=${cls} style="--c:${pc(m.profile.color)}">${(a.name[0] ?? a.email[0] ?? '?').toUpperCase()}</span>`;
+    const letter = (p: ProfileRow, cls: string) => html`<span class=${cls} style="--c:${pc(p.color)}">${(p.name[0] ?? '?').toUpperCase()}</span>`;
+    const key = (e: KeyboardEvent) => {
+      const items = [...this.renderRoot.querySelectorAll<HTMLElement>('.acct [role=menuitem]')];
+      const i = items.indexOf((this.renderRoot as ShadowRoot).activeElement as HTMLElement);
+      const next = e.key === 'ArrowDown' ? items[(i + 1) % items.length] : e.key === 'ArrowUp' ? items[(i - 1 + items.length) % items.length] : null;
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+    };
+    return html`<div class="backdrop clear" @mousedown=${() => this.close()}></div>
+      <div class="pop acct" style="left:${left}px; top:${s.anchor.y + s.anchor.height + 6}px" role="menu" aria-label=${t('google_menu')} @keydown=${key}>
+        ${me
+          ? html`<div class="acct-head">
+              <span style="--ring:${m.profiles.length ? pc(m.profile.color) : 'transparent'}">${av(me, 'acct-av')}</span>
+              <div class="acct-name">${me.name}</div>
+              <div class="acct-mail">${me.email}</div>
+              <button class="btn" role="menuitem" @click=${() => void run('manage')}>${t('google_manage')}</button>
+            </div>`
+          : html`<div class="acct-head">
+              ${letter(m.profile, 'acct-av')}
+              <div class="acct-name">${m.profile.name}</div>
+              ${g ? html`<div class="acct-desc">${t('google_signin_desc')}</div>
+                <button class="btn primary" role="menuitem" @click=${() => void run('signin')}>${t('google_signin')}</button>` : nothing}
+            </div>`}
+        ${others.map((a, i) => html`<button role="menuitem" class="acct-row ${a.signedOut ? 'out' : ''}" style="animation-delay:${40 + i * 35}ms"
+            aria-label=${a.signedOut ? `${a.email} · ${t('google_sign_in_again')}` : t('google_switch_to', { email: a.email })}
+            @click=${() => void run(a.signedOut ? `signin-again:${a.email}` : `use:${a.email}`)}>
+            ${av(a, 'sm-av')}<span class="rn"><b>${a.name}</b><small>${a.email}</small></span>
+            ${a.signedOut ? html`<span class="tag">${t('google_signed_out')}</span>` : html`<span class="hint">${icon('chevron-right', 14)}</span>`}
+          </button>`)}
+        ${g ? html`<button role="menuitem" class="mi" @click=${() => void run('add')}>${icon('plus', 16)}<span>${t('google_add')}</span></button>` : nothing}
+        ${me && g?.gemini ? html`<button role="menuitem" class="mi" @click=${() => void run('gemini')}>${geminiMark(16)}<span>${t('gemini_ask')}</span></button>` : nothing}
+        ${me ? html`<button role="menuitem" class="mi" @click=${() => void run('signout')}>${icon('log-out', 16)}<span>${t('google_signout_all')}</span></button>` : nothing}
+        <div class="sep"></div>
+        <p class="sec-title">${t('profile_section')}</p>
+        <div class="acct-row current">${letter(m.profile, 'sm-av xs')}<span class="rn"><b>${m.profile.name}</b></span><span class="now">${t('profile_current')}</span></div>
+        ${m.profiles.map((p) => html`<button role="menuitem" class="acct-row" @click=${() => void run(`profile:${p.id}`)}>${letter(p, 'sm-av xs')}<span class="rn"><b>${p.name}</b></span><span class="hint">${icon('external', 13)}</span></button>`)}
+        <button role="menuitem" class="mi" @click=${() => void run('profile-add')}>${icon('user', 16)}<span>${t('profile_add')}</span></button>
+        <button role="menuitem" class="mi" @click=${() => void run('private')}>${icon('eye-off', 16)}<span>${t('cmd_new_private')}</span></button>
+        <button role="menuitem" class="mi" @click=${() => void run('profile-manage')}>${icon('settings', 16)}<span>${t('profile_manage')}</span></button>
       </div>`;
   }
 

@@ -19,6 +19,7 @@ import './panels';
 import './assistant_panel';
 import './notes_panel';
 import './agent_panel';
+import './gemini_panel';
 
 export const shell = client(ShellInterface);
 

@@ -11,6 +11,7 @@ import { installAiFeatures } from './ai/ai_features';
 import { SyncService } from './sync/sync_service';
 import { installPlatformFeatures } from './shields/platform_features';
 import { WebAppsService } from './apps/web_apps';
+import { GoogleService } from './google/google_service';
 import { AgentController } from './agent/agent_controller';
 
 export interface PhaseServices {
@@ -35,6 +36,7 @@ export function installPhaseServices(app: BrowserApp): PhaseServices {
   const sync = new SyncService(app);
   installPlatformFeatures(app);
   app.webApps = new WebAppsService(app);
+  app.google = new GoogleService(app);
   // Phases 5-6 (R3): the supervised agent. Off unless the flag and tester opt-in are on.
   const agent = new AgentController(app, assistant);
   return { assistant, runtime, memory, notes, sync, agent };

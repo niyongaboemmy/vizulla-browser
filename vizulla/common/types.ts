@@ -54,7 +54,7 @@ export interface GroupInfo {
   aiGenerated: boolean;
 }
 
-export type PanelKind = 'assistant' | 'notes' | 'agent';
+export type PanelKind = 'assistant' | 'notes' | 'agent' | 'gemini';
 export type TabLayout = 'vertical' | 'horizontal';
 
 export interface ToastInfo {
@@ -118,6 +118,24 @@ export interface WindowState {
   profile: { id: string; name: string; color: string; count: number };
   /** Shown as the toolbar update button when a newer release exists. */
   update: UpdateInfo | null;
+  /** Google accounts signed in on the web (avatar, account menu) and the Gemini button; null when off or private. */
+  google?: GoogleInfo | null;
+}
+
+export interface GoogleAccountInfo {
+  /** authuser index; -1 when signed out. */
+  index: number;
+  name: string;
+  email: string;
+  /** A data: URL, or null (the initial is shown). */
+  photo: string | null;
+  signedOut: boolean;
+}
+
+export interface GoogleInfo {
+  accounts: GoogleAccountInfo[];
+  active: string | null;
+  gemini: boolean;
 }
 
 export interface UpdateInfo {

@@ -75,6 +75,8 @@ export class BrowserApp {
   readonly tools: ToolsService;
   /** Installed web apps (apps/web_apps.ts), set up with the phase services. */
   webApps: import('./apps/web_apps').WebAppsService | null = null;
+  /** Google accounts on the web and Gemini (google/google_service.ts), set up with the phase services. */
+  google: import('./google/google_service').GoogleService | null = null;
   /** An installed app's window in front takes the menu shortcuts it understands. */
   appCommand: ((id: string) => boolean) | null = null;
   mcp!: McpServer;
@@ -630,6 +632,14 @@ export class BrowserApp {
           if (tab) this.passwords.showMenu(w, tab, point);
         },
         showProfileMenu: (ctx, point) => this.showProfileMenu(win(ctx), point),
+        openAccountMenu: (ctx, anchor) => {
+          const w = win(ctx);
+          if (w.profile.isPrivate) return;
+          if (!this.google) return this.showProfileMenu(w, { x: anchor.x, y: anchor.y + anchor.height + 4 });
+          w.overlay.show({ kind: 'accounts', anchor, menu: this.google.menu(w) });
+        },
+        setPanelView: (ctx, r) => win(ctx).setPanelViewBounds(r ?? null),
+        geminiAction: (ctx, what) => this.google?.panelAction(win(ctx), what),
         showTip: (ctx, r, doc) => void win(ctx).tip.show(r, doc),
         installApp: (ctx, id) => void this.webApps?.promptInstall(win(ctx), id),
         openInApp: (ctx, id) => this.webApps?.openInApp(win(ctx), id),
@@ -780,6 +790,7 @@ export class BrowserApp {
           w.activeTab()?.wc?.reload();
           return this.siteInfo(w);
         },
+        accountAction: (ctx, id) => this.google?.action(win(ctx), id) ?? null,
         appMenuAction: (ctx, id) => {
           const w = win(ctx);
           // Zoom and theme rows keep the menu open, so the change can be seen and adjusted.

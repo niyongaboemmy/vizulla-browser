@@ -69,6 +69,9 @@ export class BrowserWindowController extends EventEmitter {
   private splitRect: Rect | null = null;
   private splitTabId: number | null = null;
   private panel: PanelKind | null = null;
+  /** A web page shown in the side panel (Gemini), and where the chrome UI says it goes. */
+  private panelView: WebContentsView | null = null;
+  private panelViewRect: Rect | null = null;
   private toasts: (ToastInfo & { timer: NodeJS.Timeout; run?: () => void })[] = [];
   private readonly closed: ClosedTab[] = [];
   private stateTimer: NodeJS.Timeout | null = null;
@@ -296,7 +299,7 @@ export class BrowserWindowController extends EventEmitter {
     on('html-fullscreen', (on: boolean) => {
       this.htmlFullscreen = on;
       this.win.setFullScreen(on);
-      this.layoutTabs();
+      this.syncViews();
       this.pushState();
     });
     on('closed-by-page', () => this.closeTab(tab.id, { fromPage: true }));
@@ -540,6 +543,18 @@ export class BrowserWindowController extends EventEmitter {
     if (width) this.profile.prefs.set('tabs.panelWidth', width);
     this.pushState();
     if (panel) this.app.ensurePanel(this, panel);
+    this.syncViews();
+  }
+
+  setPanelView(view: WebContentsView | null): void {
+    if (this.panelView && this.panelView !== view) this.detachView(this.panelView);
+    this.panelView = view;
+    this.syncViews();
+  }
+
+  setPanelViewBounds(r: Rect | null): void {
+    this.panelViewRect = r && r.width > 0 && r.height > 0 ? r : null;
+    this.syncViews();
   }
 
   togglePanel(panel: PanelKind): void {
@@ -569,6 +584,7 @@ export class BrowserWindowController extends EventEmitter {
       active.view.setBounds(roundRect(this.contentRect));
       active.view.setBorderRadius(radius);
     }
+    if (this.panelView && this.panelViewRect && this.attachedViews.has(this.panelView)) this.panelView.setBounds(roundRect(this.panelViewRect));
     if (this.splitTabId !== null && this.splitRect) {
       const s = this.tabs.get(this.splitTabId);
       if (s?.view) {
@@ -593,6 +609,8 @@ export class BrowserWindowController extends EventEmitter {
       if (s?.view && this.model.get(this.splitTabId)?.spaceId === this.model.activeSpaceId) want.add(s.view);
       else this.splitTabId = null;
     }
+    // The Gemini panel's page, while its panel is open (never over a page in full screen).
+    if (this.panelView && this.panel === 'gemini' && this.panelViewRect && !this.locked && !this.htmlFullscreen) want.add(this.panelView);
     for (const v of this.attachedViews) if (!want.has(v)) this.detachView(v);
     // The tip view is always topmost; take it down so the indexes below stay right.
     if ([...want].some((v) => !this.attachedViews.has(v))) this.tip.hide();
@@ -714,6 +732,7 @@ export class BrowserWindowController extends EventEmitter {
       aiMode: prefs.get('ai.mode'),
       features: this.profile.features.snapshot(),
       update: this.app.updates.info(),
+      google: this.app.google?.state(this) ?? null,
       glass: false,
       // The frame takes the site's colour (like mobile browsers), except in private windows and high contrast.
       chromeColor: this.profile.isPrivate || this.resolvedTheme() === 'high-contrast' || !prefs.get('appearance.siteColors') ? null : (this.activeTab()?.pageColor ?? null),
