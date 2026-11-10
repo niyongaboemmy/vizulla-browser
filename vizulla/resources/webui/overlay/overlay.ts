@@ -120,6 +120,17 @@ export class VzOverlay extends LitElement {
       .dlg .actions .btn { height: 36px; min-width: 88px; }
       /* A page's own dialog drops from the top of the page, like Chrome's. */
       .dlg.page { top: 92px; width: min(440px, calc(100vw - 32px)); }
+      /* Passkey sheet: a key in softly spreading rings while the site waits for it. */
+      .pk-hero { position: relative; width: 72px; height: 72px; margin: 6px auto 14px; display: grid; place-items: center; }
+      .pk-badge { position: relative; width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; color: var(--vz-accent); background: var(--vz-accent-soft); animation: av-in 420ms cubic-bezier(.34,1.56,.64,1) both; }
+      .pk-ring { position: absolute; inset: 8px; border-radius: 22px; border: 2px solid var(--vz-accent); opacity: 0; animation: pk-pulse 2.4s var(--vz-ease) infinite; }
+      .pk-ring.two { animation-delay: 1.2s; }
+      @keyframes pk-pulse { 0% { opacity: .45; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.45); } }
+      .pk-title { text-align: center; justify-content: center; }
+      .pk-lead { text-align: center; color: var(--vz-text-2); margin: 4px 0 14px; }
+      .pk-note { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--vz-surface-2); color: var(--vz-text-2); font-size: var(--vz-text-s); line-height: 1.5; }
+      .pk-note .vz-icon { flex: none; margin-top: 2px; color: var(--vz-text-3); }
+      @media (prefers-reduced-motion: reduce) { .pk-ring { animation: none; } }
       .js-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
       .js-site { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; background: var(--vz-surface-2); color: var(--vz-text-2); overflow: hidden; }
       .js-site img { width: 18px; height: 18px; border-radius: 4px; }

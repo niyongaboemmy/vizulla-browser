@@ -22,6 +22,7 @@ import { PasswordService } from './passwords/password_service';
 import { ExtensionsService } from './extensions/extensions_service';
 import { WebTab } from './tabs/web_tab';
 import { installJsDialogs, type DialogHost } from './ui/js_dialogs';
+import { installPasskeys } from './ui/passkeys';
 import { profileArgs, Profiles } from './profiles/profiles';
 import { BRANDING } from '../app/branding';
 import { destinationUrl, matchDestinations } from './command_bar/destinations';
@@ -108,6 +109,7 @@ export class BrowserApp {
       return profile.shields.cosmeticFor(frame, e.senderFrame?.top?.url ?? frame, { classes: list(o.classes), ids: list(o.ids), hrefs: list(o.hrefs) });
     });
     installJsDialogs(this);
+    installPasskeys(this);
     this.applyLocale();
     WebTab.fonts = () => {
       const p = profile.prefs;

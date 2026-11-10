@@ -1158,5 +1158,15 @@
   "set_google_accounts": "Show Google accounts in the profile menu",
   "set_google_accounts_desc": "Lists the Google accounts you’re signed in to on the web, to switch between them. Vizulla asks Google only after you sign in on a Google site.",
   "set_gemini_button": "Show the Ask Gemini button",
-  "set_gemini_button_desc": "Opens Gemini beside the page, signed in with the account you choose."
+  "set_gemini_button_desc": "Opens Gemini beside the page, signed in with the account you choose.",
+  "passkey_title": "Use a passkey for {site}",
+  "passkey_create_title": "Create a passkey for {site}",
+  "passkey_key_hint": "Insert your security key and touch it.",
+  "passkey_note_mac": "Passkeys saved in iCloud Keychain, a password manager or on your phone can’t be used in Vizulla yet.",
+  "passkey_note_other": "Passkeys saved on your phone or in a password manager can’t be used in Vizulla yet.",
+  "passkey_note_get": "Choose Sign in another way to use your password, a code, or a prompt on your phone.",
+  "passkey_note_create": "Choose Not now to keep signing in the way you do today.",
+  "passkey_wait": "Keep waiting",
+  "passkey_other_way": "Sign in another way",
+  "passkey_not_now": "Not now"
 }

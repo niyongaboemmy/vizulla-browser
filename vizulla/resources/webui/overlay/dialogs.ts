@@ -68,6 +68,23 @@ registerDialog('js-dialog', (d, host) => {
     </div>`;
 });
 
+// A site asking for a passkey (browser/ui/passkeys.ts). A security key completes it on its own;
+// "Sign in another way" ends the request so the site offers its other methods.
+registerDialog('passkey', (d, host) => {
+  const create = d.kind === 'create';
+  const site = String(d.site ?? '');
+  const mac = d.platform === 'darwin';
+  return html`
+    <div class="pk-hero" aria-hidden="true"><span class="pk-ring"></span><span class="pk-ring two"></span><span class="pk-badge">${icon('key', 26)}</span></div>
+    <h2 id="dlg-title" class="pk-title">${t(create ? 'passkey_create_title' : 'passkey_title', { site })}</h2>
+    <p class="pk-lead">${t('passkey_key_hint')}</p>
+    <div class="pk-note">${icon('info', 15)}<span>${t(mac ? 'passkey_note_mac' : 'passkey_note_other')} ${t(create ? 'passkey_note_create' : 'passkey_note_get')}</span></div>
+    <div class="actions">
+      <button class="btn" @click=${() => host.resolve({ action: 'wait' })}>${t('passkey_wait')}</button>
+      <button class="btn primary" autofocus @click=${() => host.resolve({ action: 'other' })}>${t(create ? 'passkey_not_now' : 'passkey_other_way')}</button>
+    </div>`;
+});
+
 // ---- Installable web apps (browser/apps/web_apps.ts)
 
 const loadImage = (src: string) =>

@@ -49,6 +49,67 @@ if (!/^(vizulla|chrome-extension|devtools|chrome):$/.test(location.protocol)) {
   });
 }
 
+// Passkeys (ui/passkeys.ts): Electron has no WebAuthn UI, so a passkey request waits silently for a
+// security key and sites like Google look stuck. The browser shows a sheet while one is pending;
+// choosing another way ends the request the way Chrome's Cancel does (NotAllowedError), so the
+// site offers its other sign-in methods. Windows shows its own system dialog instead.
+if (/^https?:$/.test(location.protocol) && process.platform !== 'win32') {
+  let next = 0;
+  const cancels = new Map<number, () => void>();
+  ipcRenderer.on('vz:webauthn-cancel', (_e, id: number) => cancels.get(id)?.());
+  const begin = (kind: string, rpId: string, onCancel: () => void): number => {
+    const id = ++next;
+    cancels.set(id, onCancel);
+    ipcRenderer.send('vz:webauthn', { op: 'begin', id, kind, rpId });
+    return id;
+  };
+  const end = (id: number) => {
+    cancels.delete(id);
+    ipcRenderer.send('vz:webauthn', { op: 'end', id });
+  };
+  contextBridge.executeInMainWorld({
+    func: (begin: (kind: string, rpId: string, onCancel: () => void) => number, end: (id: number) => void) => {
+      const proto = window.CredentialsContainer?.prototype;
+      if (!proto) return;
+      const wrap = (kind: 'get' | 'create', orig: (o?: CredentialRequestOptions & CredentialCreationOptions) => Promise<Credential | null>) =>
+        function (this: CredentialsContainer, opts?: CredentialRequestOptions & CredentialCreationOptions & { mediation?: string }) {
+          // Only passkey ceremonies the user is asked to complete (not passwords, not autofill-style conditional requests).
+          if (!opts?.publicKey || opts.mediation === 'conditional' || opts.signal?.aborted) return orig.call(this, opts);
+          const pk = opts.publicKey as { rpId?: string; rp?: { id?: string } };
+          const rpId = String((kind === 'get' ? pk.rpId : pk.rp?.id) || location.hostname);
+          const ac = new AbortController();
+          opts.signal?.addEventListener('abort', () => ac.abort(opts.signal!.reason), { once: true });
+          return new Promise<Credential | null>((resolve, reject) => {
+            let done = false;
+            const finish = () => {
+              if (done) return false;
+              done = true;
+              end(id);
+              return true;
+            };
+            const id = begin(kind, rpId, () => {
+              if (!finish()) return;
+              ac.abort();
+              reject(new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError'));
+            });
+            orig.call(this, { ...opts, signal: ac.signal }).then(
+              (v) => finish() && resolve(v),
+              (e) => finish() && reject(e),
+            );
+          });
+        };
+      const define = (name: 'get' | 'create') => {
+        const fn = wrap(name, proto[name]);
+        Object.defineProperty(fn, 'name', { value: name });
+        Object.defineProperty(proto, name, { value: fn, writable: true, configurable: true, enumerable: true });
+      };
+      define('get');
+      define('create');
+    },
+    args: [begin, end],
+  });
+}
+
 // Installable apps (apps/web_apps.ts): Chrome's beforeinstallprompt / appinstalled events, so a
 // site's own "Install app" button works. prompt() opens the browser's install dialog.
 if (/^https?:$/.test(location.protocol) && window === window.top) {

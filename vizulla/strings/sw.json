@@ -1159,5 +1159,15 @@
   "set_google_accounts": "Onyesha akaunti za Google kwenye menyu ya wasifu",
   "set_google_accounts_desc": "Huorodhesha akaunti za Google ulizoingia kwenye wavuti ili ubadilishe kati yake. Vizulla huuliza Google tu baada ya kuingia kwenye tovuti ya Google.",
   "set_gemini_button": "Onyesha kitufe cha Uliza Gemini",
-  "set_gemini_button_desc": "Hufungua Gemini kando ya ukurasa, ukiwa umeingia na akaunti unayochagua."
+  "set_gemini_button_desc": "Hufungua Gemini kando ya ukurasa, ukiwa umeingia na akaunti unayochagua.",
+  "passkey_title": "Tumia passkey kwa {site}",
+  "passkey_create_title": "Unda passkey kwa {site}",
+  "passkey_key_hint": "Weka ufunguo wako wa usalama kisha uuguse.",
+  "passkey_note_mac": "Passkey zilizohifadhiwa kwenye iCloud Keychain, kidhibiti cha manenosiri au kwenye simu yako bado haziwezi kutumika kwenye Vizulla.",
+  "passkey_note_other": "Passkey zilizohifadhiwa kwenye simu yako au kidhibiti cha manenosiri bado haziwezi kutumika kwenye Vizulla.",
+  "passkey_note_get": "Chagua Ingia kwa njia nyingine ili utumie nenosiri, msimbo au arifa kwenye simu yako.",
+  "passkey_note_create": "Chagua Si sasa ili uendelee kuingia kama kawaida.",
+  "passkey_wait": "Endelea kusubiri",
+  "passkey_other_way": "Ingia kwa njia nyingine",
+  "passkey_not_now": "Si sasa"
 }

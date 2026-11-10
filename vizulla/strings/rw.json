@@ -1159,5 +1159,15 @@
   "set_google_accounts": "Erekana konti za Google muri menu ya porofayili",
   "set_google_accounts_desc": "Yerekana konti za Google winjiyemo ku rubuga kugira ngo uhindure hagati yazo. Vizulla ibaza Google gusa umaze kwinjira ku rubuga rwa Google.",
   "set_gemini_button": "Erekana buto ya Baza Gemini",
-  "set_gemini_button_desc": "Ifungura Gemini iruhande rw’urupapuro, ukoresheje konti wahisemo."
+  "set_gemini_button_desc": "Ifungura Gemini iruhande rw’urupapuro, ukoresheje konti wahisemo.",
+  "passkey_title": "Koresha passkey kuri {site}",
+  "passkey_create_title": "Kora passkey kuri {site}",
+  "passkey_key_hint": "Shyiramo urufunguzo rwawe rw’umutekano hanyuma urukoreho.",
+  "passkey_note_mac": "Passkey zibitswe muri iCloud Keychain, mu bubiko bw’ijambo ry’ibanga cyangwa kuri telefoni yawe ntiziracyakoreshwa muri Vizulla.",
+  "passkey_note_other": "Passkey zibitswe kuri telefoni yawe cyangwa mu bubiko bw’ijambo ry’ibanga ntiziracyakoreshwa muri Vizulla.",
+  "passkey_note_get": "Hitamo Injira mu bundi buryo ukoreshe ijambo ry’ibanga, kode, cyangwa ubutumwa kuri telefoni yawe.",
+  "passkey_note_create": "Hitamo Ubutaha ukomeze kwinjira nk’uko usanzwe ubikora.",
+  "passkey_wait": "Komeza utegereze",
+  "passkey_other_way": "Injira mu bundi buryo",
+  "passkey_not_now": "Ubutaha"
 }

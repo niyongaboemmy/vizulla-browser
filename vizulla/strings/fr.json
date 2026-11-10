@@ -1158,5 +1158,15 @@
   "set_google_accounts": "Afficher les comptes Google dans le menu du profil",
   "set_google_accounts_desc": "Liste les comptes Google connectés sur le web pour passer de l’un à l’autre. Vizulla ne contacte Google qu’après votre connexion sur un site Google.",
   "set_gemini_button": "Afficher le bouton Demander à Gemini",
-  "set_gemini_button_desc": "Ouvre Gemini à côté de la page, avec le compte de votre choix."
+  "set_gemini_button_desc": "Ouvre Gemini à côté de la page, avec le compte de votre choix.",
+  "passkey_title": "Utiliser une clé d’accès pour {site}",
+  "passkey_create_title": "Créer une clé d’accès pour {site}",
+  "passkey_key_hint": "Insérez votre clé de sécurité et touchez-la.",
+  "passkey_note_mac": "Les clés d’accès enregistrées dans le trousseau iCloud, un gestionnaire de mots de passe ou sur votre téléphone ne peuvent pas encore être utilisées dans Vizulla.",
+  "passkey_note_other": "Les clés d’accès enregistrées sur votre téléphone ou dans un gestionnaire de mots de passe ne peuvent pas encore être utilisées dans Vizulla.",
+  "passkey_note_get": "Choisissez Se connecter autrement pour utiliser votre mot de passe, un code ou une invite sur votre téléphone.",
+  "passkey_note_create": "Choisissez Plus tard pour continuer à vous connecter comme aujourd’hui.",
+  "passkey_wait": "Continuer d’attendre",
+  "passkey_other_way": "Se connecter autrement",
+  "passkey_not_now": "Plus tard"
 }
