@@ -64,6 +64,8 @@ const PAGES: Record<string, string> = {
     window.openLater = () => setTimeout(() => window.open('/article', '_blank'), 50);</script>`,
   '/brand': '<!doctype html><title>Brand</title><meta name="theme-color" content="#1a73e8"><h1>Brand</h1>',
   '/painted': '<!doctype html><title>Painted</title><style>body{background:#0f766e;color:#fff}</style><h1>Painted</h1>',
+  '/toggle': `<!doctype html><title>Toggle</title><style>body{margin:0;background:#ffffff;transition:background-color .2s}html.dark body{background:#0b1020}header{height:60px}</style>
+    <header></header><button id="t" onclick="document.documentElement.classList.toggle('dark')">Dark mode</button>`,
   '/dialogs': `<!doctype html><title>Dialogs</title><h1>Dialogs</h1><iframe id="f" width="300" height="80"></iframe>`,
   '/pwa': `<!doctype html><title>Vizulla Test App</title><link rel="manifest" href="/manifest.webmanifest"><h1>Test app</h1><script>
     window.__bip = null; addEventListener('beforeinstallprompt', (e) => { window.__bip = e; }); addEventListener('appinstalled', () => { window.__installed = true; });</script>`,

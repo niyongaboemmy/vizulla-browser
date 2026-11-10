@@ -62,6 +62,17 @@ export function inkFor(hex: string): 'dark' | 'light' {
   return vsDark >= vsLight ? 'dark' : 'light';
 }
 
+/**
+ * The site's colour for the frame: its declared theme-color when it agrees with what's on screen
+ * (both light or both dark: the brand's exact shade), else what's actually visible at the top of
+ * the page. Sites often declare one light theme-color and keep it in their dark mode.
+ */
+export function choosePageColor(declared: string | null, visible: string | null): string | null {
+  if (!declared) return visible;
+  if (!visible) return declared;
+  return inkFor(declared) === inkFor(visible) ? declared : visible;
+}
+
 /** The frame without a site colour: white in light theme, black in dark. */
 export function neutralFrame(theme: 'light' | 'dark' | 'high-contrast'): string {
   return theme === 'light' ? '#ffffff' : '#000000';

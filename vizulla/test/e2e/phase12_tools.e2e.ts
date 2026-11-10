@@ -90,6 +90,14 @@ test('the frame takes the site colour (theme-color, else page background); white
   await go('/brand', 'Brand');
   await inMain(h, (vz) => vz.profile.prefs.set('appearance.siteColors', false));
   await expect.poll(frame).toBe('#000000');
+  // The site switches its own theme (a dark-mode button): the frame follows without a reload.
+  await inMain(h, (vz) => vz.profile.prefs.set('appearance.siteColors', true));
+  await go('/toggle', 'Toggle');
+  await expect.poll(frame).toBe('#ffffff');
+  await inMain(h, (vz) => vz.focused().activeTab().wc.executeJavaScript("document.getElementById('t').click()", true));
+  await expect.poll(frame).toBe('#0b1020');
+  await inMain(h, (vz) => vz.focused().activeTab().wc.executeJavaScript("document.getElementById('t').click()", true));
+  await expect.poll(frame).toBe('#ffffff');
   // Menus over the page are opaque (CSS blur can't reach the page from the overlay).
   await chrome.locator('vz-toolbar').getByRole('button', { name: 'Tools', exact: true }).click();
   const ov = await overlay(h);

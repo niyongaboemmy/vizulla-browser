@@ -4,7 +4,7 @@ import { WebContentsView, type Session, type WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import { displayUrl, securityStateOf } from '@vz/common/url';
 import type { NavState } from '../spaces/spaces_service';
-import { frameColor } from '@vz/common/color';
+import { choosePageColor, frameColor } from '@vz/common/color';
 
 let nextTabId = 1;
 
@@ -34,6 +34,26 @@ export interface WebTabOptions {
   adoptView?: WebContentsView;
 }
 
+const SAMPLE_PAGE_COLOR = `(() => {
+  const solid = (el) => {
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      const c = getComputedStyle(n).backgroundColor;
+      if (c && c !== 'transparent' && !/^rgba\\([^)]*,\\s*0(\\.0+)?\\s*\\)$/.test(c)) return c;
+    }
+    return null;
+  };
+  // Along the top edge: where most points agree (a header, a hero), else the body/root.
+  const votes = new Map();
+  for (const x of [0.15, 0.5, 0.85]) {
+    const el = document.elementFromPoint(innerWidth * x, 2);
+    const c = el && solid(el);
+    if (c) votes.set(c, (votes.get(c) || 0) + 1);
+  }
+  const top = [...votes].sort((a, b) => b[1] - a[1])[0];
+  if (top && top[1] >= 2) return top[0];
+  return (document.body && solid(document.body)) || solid(document.documentElement);
+})()`;
+
 export class WebTab extends EventEmitter {
   readonly id = nextTabId++;
   readonly session: Session;
@@ -45,6 +65,7 @@ export class WebTab extends EventEmitter {
   /** The site's colour for the window frame, like mobile browsers: its theme-color, else its page background. */
   pageColor: string | null = null;
   private themeColor: string | null = null;
+  private sampledColor: string | null = null;
   loading = false;
   audible = false;
   muted = false;
@@ -76,14 +97,19 @@ export class WebTab extends EventEmitter {
     this.emit('updated');
   }
 
-  private async samplePageColor(): Promise<void> {
+  /**
+   * The page's colour where it meets the frame (like Safari): the first solid background along the
+   * top edge (sticky headers, hero sections), else the body's or the root's. Also called when the
+   * page switches its own theme (page_preload.ts notices and asks).
+   */
+  async samplePageColor(): Promise<void> {
     const wc = this.wc;
-    if (!wc || this.themeColor || !/^https?:/.test(wc.getURL())) return;
+    if (!wc || !/^https?:/.test(wc.getURL())) return;
     try {
-      const css = (await wc.executeJavaScriptInIsolatedWorld(1_002_004, [
-        { code: `(() => { for (const el of [document.body, document.documentElement]) { if (!el) continue; const c = getComputedStyle(el).backgroundColor; if (c && c !== 'transparent' && !/^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(c)) return c; } return null; })()` },
-      ])) as string | null;
-      if (!this.themeColor && this.wc === wc) this.setPageColor(frameColor(css));
+      const css = (await wc.executeJavaScriptInIsolatedWorld(1_002_004, [{ code: SAMPLE_PAGE_COLOR }])) as string | null;
+      if (this.wc !== wc) return;
+      this.sampledColor = frameColor(css);
+      this.setPageColor(choosePageColor(this.themeColor, this.sampledColor));
     } catch {
       /* navigating away */
     }
@@ -230,6 +256,7 @@ export class WebTab extends EventEmitter {
       this.url = url;
       // A new document: its colour comes from its own theme-color or background.
       this.themeColor = null;
+      this.sampledColor = null;
       this.setPageColor(null);
       this.isPdf = false;
       this.favicon = null;
@@ -240,8 +267,8 @@ export class WebTab extends EventEmitter {
     // else the page's own background, sampled when it's ready and after in-page navigations.
     wc.on('did-change-theme-color', (_e, color) => {
       this.themeColor = frameColor(color);
-      this.setPageColor(this.themeColor);
-      if (!this.themeColor) void this.samplePageColor();
+      this.setPageColor(choosePageColor(this.themeColor, this.sampledColor));
+      void this.samplePageColor();
     });
     wc.on('dom-ready', () => void this.samplePageColor());
     wc.on('did-finish-load', () => void this.samplePageColor());

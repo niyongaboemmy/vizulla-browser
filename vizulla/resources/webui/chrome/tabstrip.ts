@@ -34,10 +34,10 @@ export class VzTabstrip extends LitElement {
       /* Every control shares the tabs' centre line: 23px down a 40px strip (34px tabs on the bottom edge). */
       .lead, .trail { display: flex; align-items: flex-end; gap: 2px; height: 100%; padding-bottom: 3px; -webkit-app-region: no-drag; flex: none; }
       .lead { padding-left: var(--traffic, 0); padding-right: 6px; }
-      .dot { width: 24px; height: 24px; padding: 0; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-2); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), box-shadow var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
-      .dot:hover { background: var(--vz-tab-hover); color: var(--c); }
-      /* The current Space: its colour, a soft fill and a ring, readable on glass in both themes. */
-      .dot.on { --sc: var(--vz-space-ink, var(--c)); background: color-mix(in srgb, var(--sc) 22%, transparent); color: var(--sc); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sc) 45%, transparent); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
+      .dot { width: 24px; height: 24px; padding: 0; margin-bottom: 2px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; color: var(--vz-text-3); background: transparent; transition: background var(--vz-dur), color var(--vz-dur), box-shadow var(--vz-dur), transform var(--vz-dur) var(--vz-ease); }
+      .dot:hover { color: var(--vz-text); }
+      /* The current Space: a bare icon in the frame's ink (opposite to its colour), no container. */
+      .dot.on { color: var(--vz-text); animation: vz-pop 320ms cubic-bezier(.34,1.56,.64,1); }
       @keyframes vz-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .dot:active { transform: scale(0.92); }
       /* Tabs shrink to icons, then the strip scrolls (padding leaves room for the active tab's feet). */

@@ -83,6 +83,26 @@ if (/^https?:$/.test(location.protocol) && window === window.top) {
   ipcRenderer.on('vz:appinstalled', () => contextBridge.executeInMainWorld({ func: () => void window.dispatchEvent(new Event('appinstalled')) }));
 }
 
+// The window frame takes the page's colour (tabs/web_tab.ts). When the page switches its own theme
+// (a dark-mode button, the system appearance), ask the browser to look again, without a reload.
+if (/^https?:$/.test(location.protocol) && window === window.top) {
+  let timer = 0;
+  const changed = () => {
+    clearTimeout(timer);
+    // After the switch has painted; colour transitions call again when they end.
+    timer = window.setTimeout(() => ipcRenderer.send('vz:page-color-changed'), 120);
+  };
+  const watch = () => {
+    const mo = new MutationObserver(changed);
+    const opts = { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-mode', 'data-color-scheme', 'data-bs-theme', 'theme'] };
+    mo.observe(document.documentElement, opts);
+    if (document.body) mo.observe(document.body, opts);
+    for (const el of [document.documentElement, document.body]) el?.addEventListener('transitionend', (e) => (e as TransitionEvent).propertyName.includes('color') && changed(), { passive: true });
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', changed);
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', watch, { once: true }) : watch();
+}
+
 if (/^https?:$/.test(location.protocol)) {
   let cfg: PageConfig = { langs: [], farble: { level: 'off', seed: 0 } };
   try {

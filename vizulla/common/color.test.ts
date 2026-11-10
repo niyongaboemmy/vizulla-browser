@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameColor, inkFor, luminance, neutralFrame, parseColor } from './color';
+import { choosePageColor, frameColor, inkFor, luminance, neutralFrame, parseColor } from './color';
 
 describe('frame colours', () => {
   it('parses page colours in every form computed styles and theme-color use', () => {
@@ -23,6 +23,13 @@ describe('frame colours', () => {
     expect(inkFor('#1a73e8')).toBe('light'); // a brand blue gets white text
     expect(inkFor('#ffd60a')).toBe('dark'); // yellow gets dark text
     expect(luminance('#000000')).toBe(0);
+  });
+
+  it('trusts the declared theme-color only while it matches what is on screen', () => {
+    expect(choosePageColor('#f7f8fa', '#ffffff')).toBe('#f7f8fa'); // light brand shade on a light page
+    expect(choosePageColor('#f7f8fa', '#0b1020')).toBe('#0b1020'); // stale light theme-color on a dark page
+    expect(choosePageColor('#1a73e8', null)).toBe('#1a73e8');
+    expect(choosePageColor(null, '#0f766e')).toBe('#0f766e');
   });
 
   it('is white in light theme and black in dark without a site colour', () => {

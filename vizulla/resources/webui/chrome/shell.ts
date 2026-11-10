@@ -58,7 +58,7 @@ export class VzShell extends LitElement {
         color: var(--fr-text); transition: color 300ms var(--vz-ease); }
       /* On a site's colour the frame is monochrome (blue accents would vanish on a blue site). */
       :host([tinted]) vz-tabstrip, :host([tinted]) vz-toolbar, :host([tinted]) vz-sidebar, :host([tinted]) vz-tab-rail, :host([tinted]) .strip, :host([tinted]) .bookmarks {
-        --vz-accent: var(--fr-text); --vz-accent-soft: var(--fr-wash-3); --vz-on-accent: var(--fr-bg); --vz-space-ink: var(--fr-text); }
+        --vz-accent: var(--fr-text); --vz-accent-soft: var(--fr-wash-3); --vz-on-accent: var(--fr-bg); }
       /* The light sweep as the window comes forward. */
       :host::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0;
         background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, var(--fr-text, #fff) 9%, transparent) 50%, transparent 65%) no-repeat; background-size: 260% 100%; background-position: 130% 0; }

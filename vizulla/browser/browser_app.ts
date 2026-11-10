@@ -97,6 +97,8 @@ export class BrowserApp {
         scripts: e.sender.session === this.chromeSession ? [] : profile.shields.scriptsFor(e.senderFrame?.url ?? e.sender.getURL(), e.senderFrame?.top?.url ?? e.sender.getURL()),
       };
     });
+    // A page switched its own theme: the frame samples its colour again (page_preload.ts).
+    ipcMain.on('vz:page-color-changed', (e) => void this.findTabByWebContents(e.sender)?.tab.samplePageColor());
     ipcMain.handle('vz:cosmetic', (e, f: unknown) => {
       const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length <= 300).slice(0, 2000) : []);
       const o = (f ?? {}) as Record<string, unknown>;
