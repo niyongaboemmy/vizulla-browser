@@ -280,7 +280,8 @@ export class VzShell extends LitElement {
     // Collapsed, the sidebar becomes a slim rail of tab icons (as in Chrome), never nothing.
     const showRail = vertical && s.sidebarCollapsed && !tiny;
     const sidebarWidth = narrow ? Math.min(s.sidebarWidth, 200) : s.sidebarWidth;
-    const panel = s.panel && !s.classic;
+    // Side panels open in every layout, classic included (as Chrome's side panel does).
+    const panel = !!s.panel;
     // A side panel never takes more than half the window from the page.
     const panelWidth = Math.max(260, Math.min(s.panelWidth, Math.round(this.vw * (narrow ? 0.5 : 0.45))));
     return html`

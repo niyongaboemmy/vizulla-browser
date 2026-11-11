@@ -487,11 +487,7 @@ export class BrowserApp {
     });
     c.set('view.toggleSidebar', (w) => w.profile.prefs.set('tabs.sidebarCollapsed', !w.profile.prefs.get('tabs.sidebarCollapsed')));
     c.set('view.toggleLayout', (w) => w.profile.prefs.set('tabs.layout', w.profile.prefs.get('tabs.layout') === 'vertical' ? 'horizontal' : 'vertical'));
-    c.set('view.classic', (w) => {
-      const on = !w.profile.prefs.get('tabs.classic');
-      w.profile.prefs.set('tabs.classic', on);
-      if (on) w.setPanel(null);
-    });
+    c.set('view.classic', (w) => w.profile.prefs.set('tabs.classic', !w.profile.prefs.get('tabs.classic')));
     c.set('view.find', (w) => emitTo(w.chrome.webContents, 'Shell', 'find-open'));
     c.set('view.zoomIn', (w) => tab(w) && w.zoom(tab(w)!.id, 'in'));
     c.set('view.zoomOut', (w) => tab(w) && w.zoom(tab(w)!.id, 'out'));
